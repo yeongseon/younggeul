@@ -30,9 +30,7 @@ class TestRateLimiterInit:
 class TestRateLimiterWait:
     @patch("younggeul_core.connectors.rate_limit.time.sleep")
     @patch("younggeul_core.connectors.rate_limit.time.monotonic")
-    def test_first_call_no_sleep(
-        self, mock_monotonic: object, mock_sleep: object
-    ) -> None:
+    def test_first_call_no_sleep(self, mock_monotonic: object, mock_sleep: object) -> None:
         """First call should not sleep (last_call is 0.0, monotonic > 0)."""
         from unittest.mock import MagicMock
 
@@ -48,9 +46,7 @@ class TestRateLimiterWait:
 
     @patch("younggeul_core.connectors.rate_limit.time.sleep")
     @patch("younggeul_core.connectors.rate_limit.time.monotonic")
-    def test_second_call_sleeps_if_too_soon(
-        self, mock_monotonic: object, mock_sleep: object
-    ) -> None:
+    def test_second_call_sleeps_if_too_soon(self, mock_monotonic: object, mock_sleep: object) -> None:
         from unittest.mock import MagicMock
 
         mock_monotonic = mock_monotonic  # type: ignore[assignment]
@@ -77,9 +73,7 @@ class TestRateLimiterWait:
 class TestRateLimiterReset:
     @patch("younggeul_core.connectors.rate_limit.time.sleep")
     @patch("younggeul_core.connectors.rate_limit.time.monotonic")
-    def test_reset_allows_immediate_call(
-        self, mock_monotonic: object, mock_sleep: object
-    ) -> None:
+    def test_reset_allows_immediate_call(self, mock_monotonic: object, mock_sleep: object) -> None:
         from unittest.mock import MagicMock
 
         mock_monotonic = mock_monotonic  # type: ignore[assignment]

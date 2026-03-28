@@ -40,23 +40,17 @@ class TestConnectorResult:
 
     def test_empty_records(self) -> None:
         manifest = _sample_manifest()
-        result: ConnectorResult[DummyRecord] = ConnectorResult(
-            records=[], manifest=manifest
-        )
+        result: ConnectorResult[DummyRecord] = ConnectorResult(records=[], manifest=manifest)
         assert result.records == []
         assert result.manifest.response_count == 2  # noqa: PLR2004
 
     def test_frozen_cannot_reassign_records(self) -> None:
-        result = ConnectorResult(
-            records=[DummyRecord(field_a="x")], manifest=_sample_manifest()
-        )
+        result = ConnectorResult(records=[DummyRecord(field_a="x")], manifest=_sample_manifest())
         with pytest.raises(FrozenInstanceError):
             result.records = []  # type: ignore[misc]
 
     def test_frozen_cannot_reassign_manifest(self) -> None:
-        result = ConnectorResult(
-            records=[DummyRecord(field_a="x")], manifest=_sample_manifest()
-        )
+        result = ConnectorResult(records=[DummyRecord(field_a="x")], manifest=_sample_manifest())
         with pytest.raises(FrozenInstanceError):
             result.manifest = _sample_manifest()  # type: ignore[misc]
 
