@@ -6,7 +6,7 @@ from typing import Callable
 import pytest
 from pydantic import BaseModel, ValidationError
 
-from core.src.younggeul_core.state.simulation import (
+from younggeul_core.state.simulation import (
     ActionProposal,
     ParticipantState,
     ReportClaim,

@@ -8,8 +8,8 @@ from uuid import uuid4
 import pytest
 from pydantic import BaseModel, ValidationError, field_validator
 
-from core.src.younggeul_core.evidence import ClaimRecord, EvidenceRecord, GateResult
-from core.src.younggeul_core.state import (
+from younggeul_core.evidence import ClaimRecord, EvidenceRecord, GateResult
+from younggeul_core.state import (
     BronzeAptTransaction,
     BronzeInterestRate,
     BronzeMigration,
@@ -22,7 +22,7 @@ from core.src.younggeul_core.state import (
     SilverAptTransaction,
     SnapshotRef,
 )
-from core.src.younggeul_core.storage import SnapshotManifest, SnapshotTableEntry
+from younggeul_core.storage import SnapshotManifest, SnapshotTableEntry
 
 
 class BenchmarkScenarioContract(BaseModel):

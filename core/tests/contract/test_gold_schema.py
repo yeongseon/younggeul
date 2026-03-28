@@ -3,7 +3,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from core.src.younggeul_core.state.gold import (
+from younggeul_core.state.gold import (
     BaselineForecast,
     GoldComplexMonthlyMetrics,
     GoldDistrictMonthlyMetrics,

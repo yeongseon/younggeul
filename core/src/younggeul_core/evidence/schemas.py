@@ -1,6 +1,6 @@
 from datetime import datetime
 import re
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -39,7 +39,7 @@ class EvidenceRecord(BaseModel):
 class ClaimRecord(BaseModel):
     claim_id: str
     run_id: str
-    claim_json: dict
+    claim_json: dict[str, Any]
     evidence_ids: list[str]
     gate_status: Literal["pending", "passed", "failed", "repaired"] = "pending"
     gate_checked_at: datetime | None = None
@@ -67,7 +67,7 @@ class GateResult(BaseModel):
     claim_id: str
     status: Literal["passed", "failed"]
     checked_evidence_ids: list[str]
-    mismatches: list[dict] = Field(default_factory=list)
+    mismatches: list[dict[str, Any]] = Field(default_factory=list)
     checked_at: datetime
 
     model_config = ConfigDict(frozen=True)

@@ -39,15 +39,27 @@ target-version = "py312"
 [tool.mypy]
 python_version = "3.12"
 strict = false
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
 
 [[tool.mypy.overrides]]
 module = ["core.*"]
 strict = true
 
 [tool.pytest.ini_options]
+addopts = "--import-mode=importlib"
 testpaths = [
   "core/tests",
   "apps/kr-seoul-apartment/tests",
+]
+pythonpath = [
+  "core/src",
+  "apps/kr-seoul-apartment/src",
+  "benchmarks/kr-housing/src",
 ]
 markers = [
   "slow: marks tests as slow",

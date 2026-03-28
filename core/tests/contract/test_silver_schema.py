@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from core.src.younggeul_core.state.silver import (
+from younggeul_core.state.silver import (
     SilverAptTransaction,
     SilverComplexBridge,
     SilverDataQualityScore,

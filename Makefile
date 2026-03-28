@@ -22,7 +22,7 @@ test-all: ## Run all tests including integration
 	pytest --cov
 
 test-contract: ## Run contract tests only
-	PYTHONPATH=core/src python3 -m pytest core/tests/contract/ -v
+	PYTHONPATH=core/src:benchmarks/kr-housing/src python3 -m pytest core/tests/contract/ benchmarks/kr-housing/tests/ -v
 
 clean: ## Remove build artifacts
 	find . -type d -name __pycache__ -exec rm -rf {} + 2>/dev/null || true

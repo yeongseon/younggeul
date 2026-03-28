@@ -44,17 +44,17 @@ class SnapshotManifest(BaseModel):
             raise ValueError("dataset_snapshot_id must be a 64-character lowercase hex SHA-256 string")
         return value
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def table_hashes(self) -> dict[str, str]:
         return {entry.table_name: entry.table_hash for entry in self.table_entries}
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def record_counts(self) -> dict[str, int]:
         return {entry.table_name: entry.record_count for entry in self.table_entries}
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def total_records(self) -> int:
         return sum(entry.record_count for entry in self.table_entries)
