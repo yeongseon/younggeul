@@ -1,0 +1,11 @@
+name: Nightly Evaluation
+# Stub — activate in M8-05
+on:
+  schedule:
+    - cron: "0 2 * * *" # 2 AM UTC daily
+  workflow_dispatch:
+jobs:
+  eval:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Stub — activate in milestone M8 (Evaluation Plane)"

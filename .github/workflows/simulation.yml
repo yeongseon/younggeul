@@ -1,0 +1,43 @@
+name: Simulation
+on:
+  workflow_dispatch:
+    inputs:
+      snapshot_id:
+        description: "Dataset snapshot ID"
+        required: true
+      query:
+        description: "Simulation query"
+        required: true
+        default: "강남구 아파트 매매 방향 예측"
+      max_rounds:
+        description: "Maximum simulation rounds"
+        default: "6"
+jobs:
+  simulate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LITELLM_API_KEY: ${{ secrets.LITELLM_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev]"
+      - name: Check LLM API key
+        run: |
+          if [ -z "$LITELLM_API_KEY" ]; then
+            echo "::warning::LITELLM_API_KEY not set. Cannot run simulation."
+            exit 1
+          fi
+      - name: Run simulation
+        run: 'echo "TODO: younggeul simulate --snapshot ${{ inputs.snapshot_id }} --query ''${{ inputs.query }}'' --max-rounds ${{ inputs.max_rounds }}"'
+      - name: Upload report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulation-report
+          path: reports/
+          if-no-files-found: ignore

@@ -1,0 +1,12 @@
+name: Benchmark
+# Stub — activate in M4-06
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "benchmarks/**"
+jobs:
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Stub — activate in milestone M4 (Gold & Baseline)"

@@ -1,0 +1,12 @@
+name: CodeQL Analysis
+# Stub — activate in M9-03
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 4 * * 0" # Sunday 4 AM UTC
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Stub — activate in milestone M9 (Observability & Security)"

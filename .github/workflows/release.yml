@@ -1,0 +1,11 @@
+name: Release
+# Stub — activate in M10-05
+on:
+  push:
+    tags:
+      - "v*"
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "Stub — activate in milestone M10 (v0.1 Release)"
