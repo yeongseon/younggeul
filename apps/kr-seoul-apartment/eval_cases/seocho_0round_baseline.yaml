@@ -1,0 +1,26 @@
+# Canonical scenario: 서초구 flat market baseline, 0 rounds
+scenario_id: seocho-0round-baseline
+description: "서초구 0-round baseline (no simulation rounds)"
+query: "서초구 아파트 시장 기본 분석"
+run_name: "eval-seocho-baseline"
+model_id: "gpt-test"
+max_rounds: 0
+expectations:
+  min_claims: 5
+  required_claim_types:
+    - simulation_overview
+    - direction
+    - volume
+    - participant_summary
+    - risk_factors
+  min_evidence_refs: 1
+  expected_event_types:
+    - INTAKE_PLANNED
+    - SCENARIO_BUILT
+    - WORLD_INITIALIZED
+    - SIMULATION_COMPLETED
+    - REPORT_WRITTEN
+    - CRITIC
+    - CITATION_GATE
+    - REPORT_RENDERED
+  report_must_contain_sections: true

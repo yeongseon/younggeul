@@ -1,0 +1,28 @@
+# Canonical scenario: 강남구 bull market, 2 rounds
+scenario_id: gangnam-2round-bull
+description: "강남구 2-round bull market simulation"
+query: "강남구 아파트 시장이 상승세를 보이고 있습니다. 향후 전망을 분석해주세요."
+run_name: "eval-gangnam-bull"
+model_id: "gpt-test"
+max_rounds: 2
+expectations:
+  min_claims: 5
+  required_claim_types:
+    - simulation_overview
+    - direction
+    - volume
+    - participant_summary
+    - risk_factors
+  min_evidence_refs: 1
+  expected_event_types:
+    - INTAKE_PLANNED
+    - SCENARIO_BUILT
+    - WORLD_INITIALIZED
+    - DECISIONS_MADE
+    - ROUND_RESOLVED
+    - SIMULATION_COMPLETED
+    - REPORT_WRITTEN
+    - CRITIC
+    - CITATION_GATE
+    - REPORT_RENDERED
+  report_must_contain_sections: true

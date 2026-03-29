@@ -1,0 +1,28 @@
+# Canonical scenario: 강남구 stress test, 5 rounds
+scenario_id: gangnam-5round-stress
+description: "강남구 5-round stress test — extended simulation"
+query: "강남구 아파트 시장 장기 시뮬레이션"
+run_name: "eval-gangnam-stress"
+model_id: "gpt-test"
+max_rounds: 5
+expectations:
+  min_claims: 5
+  required_claim_types:
+    - simulation_overview
+    - direction
+    - volume
+    - participant_summary
+    - risk_factors
+  min_evidence_refs: 1
+  expected_event_types:
+    - INTAKE_PLANNED
+    - SCENARIO_BUILT
+    - WORLD_INITIALIZED
+    - DECISIONS_MADE
+    - ROUND_RESOLVED
+    - SIMULATION_COMPLETED
+    - REPORT_WRITTEN
+    - CRITIC
+    - CITATION_GATE
+    - REPORT_RENDERED
+  report_must_contain_sections: true
