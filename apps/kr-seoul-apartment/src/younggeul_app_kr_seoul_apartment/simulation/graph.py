@@ -26,7 +26,7 @@ def build_simulation_graph(
     event_store: EventStore,
     *,
     default_max_rounds: int = DEFAULT_MAX_ROUNDS,
-) -> CompiledStateGraph[SimulationGraphState, None, SimulationGraphState, SimulationGraphState]:
+) -> CompiledStateGraph[Any, Any, Any, Any]:
     graph = StateGraph(SimulationGraphState)
 
     graph.add_node("intake_planner", _make_intake_planner_stub(event_store))
@@ -95,7 +95,7 @@ def _append_event(
     return event_id
 
 
-def _make_intake_planner_stub(event_store: EventStore):
+def _make_intake_planner_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         event_id = _append_event(event_store, state, "INTAKE_PLANNED")
         user_query = state.get("user_query", "")
@@ -110,7 +110,7 @@ def _make_intake_planner_stub(event_store: EventStore):
     return node
 
 
-def _make_scenario_builder_stub(event_store: EventStore):
+def _make_scenario_builder_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         event_id = _append_event(event_store, state, "SCENARIO_BUILT")
         return {
@@ -127,7 +127,7 @@ def _make_scenario_builder_stub(event_store: EventStore):
     return node
 
 
-def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: int):
+def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: int) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         max_rounds = state.get("max_rounds", default_max_rounds)
         snapshot = state.get("snapshot") or SnapshotRef(
@@ -179,7 +179,7 @@ def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: in
     return node
 
 
-def _make_round_runner_stub(event_store: EventStore):
+def _make_round_runner_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         next_round = state.get("round_no", 0) + 1
         event_id = _append_event(event_store, state, "ROUND_COMPLETED", round_no=next_round)
@@ -198,7 +198,7 @@ def _make_round_runner_stub(event_store: EventStore):
     return node
 
 
-def _make_report_writer_stub(event_store: EventStore):
+def _make_report_writer_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         claim_id = str(uuid4())
         event_id = _append_event(event_store, state, "REPORT_WRITTEN", payload={"claim_id": claim_id})
@@ -218,7 +218,7 @@ def _make_report_writer_stub(event_store: EventStore):
     return node
 
 
-def _make_passthrough_stub(event_store: EventStore, name: str):
+def _make_passthrough_stub(event_store: EventStore, name: str) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         event_id = _append_event(event_store, state, name.upper())
         return {"event_refs": [event_id]}
