@@ -17,6 +17,9 @@ data/snapshots/**
 eval_results/
 demo_output/
 
+# Docs build
+site/
+
 # IDE
 .vscode/
 .idea/

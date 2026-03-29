@@ -1,12 +1,45 @@
 name: Deploy Documentation
-# Stub — activate in M10-05
 on:
   push:
+    branches: [main]
     tags:
       - "v*"
   workflow_dispatch:
+
+permissions:
+  pages: write
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-docs
+  cancel-in-progress: true
+
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - run: echo "Stub — activate in milestone M10 (v0.1 Release)"
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: astral-sh/setup-uv@v4
+      - name: Install docs dependencies
+        run: uv pip install --system -e ".[docs]"
+      - name: Build docs
+        run: mkdocs build --strict
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
