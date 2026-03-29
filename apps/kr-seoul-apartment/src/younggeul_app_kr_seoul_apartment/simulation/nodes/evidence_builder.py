@@ -80,17 +80,17 @@ def make_evidence_builder_node(evidence_store: EvidenceStore) -> Any:
             role_data[role]["total_capital"] += participant.capital
             role_data[role]["total_holdings"] += participant.holdings
 
-        for role, data in sorted(role_data.items()):
+        for role_key, data in sorted(role_data.items()):
             part_eid = str(uuid4())
             evidence_store.add(
                 EvidenceRecord(
                     evidence_id=part_eid,
                     kind="participant_fact",
                     subject_type="participant_role",
-                    subject_id=role,
+                    subject_id=role_key,
                     round_no=round_no,
                     payload={
-                        "role": role,
+                        "role": role_key,
                         **data,
                     },
                     source_event_ids=[],
