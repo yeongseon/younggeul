@@ -4,23 +4,93 @@ from __future__ import annotations
 
 import json
 import time
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from importlib import import_module
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 
-from opentelemetry.trace import Status, StatusCode
 from pydantic import BaseModel, ValidationError
 
-from ..tracing import get_tracer
 from .ports import LLMMessage
 
 T = TypeVar("T", bound=BaseModel)
 
+_KNOWN_PROVIDERS: frozenset[str] = frozenset(
+    {
+        "anthropic",
+        "azure",
+        "bedrock",
+        "deepseek",
+        "openrouter",
+        "replicate",
+        "sagemaker",
+        "vllm",
+        "vertex_ai",
+    }
+)
+
 
 def _normalize_provider(model: str) -> str:
-    if "/" in model:
-        return model.split("/")[0]
+    """Extract the provider name from a LiteLLM model string.
+
+    Args:
+        model: LiteLLM model identifier (e.g. ``vllm/meta-llama/...``).
+
+    Returns:
+        Lower-cased provider name; ``"openai"`` for bare model names.
+    """
+    if not model:
+        return "unknown"
+
+    if "/" not in model:
+        return "openai"
+
+    prefix = model.split("/", 1)[0].lower()
+    if prefix in _KNOWN_PROVIDERS:
+        return prefix
+
     return "openai"
+
+
+class _SpanLike(Protocol):
+    def set_attribute(self, key: str, value: object) -> None: ...
+    def set_status(self, status: object) -> None: ...
+    def record_exception(self, exception: BaseException) -> None: ...
+
+
+class _NoOpSpan:
+    def set_attribute(self, _key: str, _value: object) -> None:
+        pass
+
+    def set_status(self, _status: object) -> None:
+        pass
+
+    def record_exception(self, _exception: BaseException) -> None:
+        pass
+
+
+@contextmanager
+def _noop_span_ctx(**_kwargs: object) -> Iterator[_NoOpSpan]:
+    yield _NoOpSpan()
+
+
+def _make_span_ctx(name: str, attributes: dict[str, Any]) -> Any:
+    try:
+        from ..tracing import get_tracer
+
+        return get_tracer().start_as_current_span(name, attributes=attributes)
+    except Exception:
+        return _noop_span_ctx()
+
+
+def _set_error_status(span: _SpanLike, exc: Exception) -> None:
+    try:
+        from opentelemetry.trace import Status, StatusCode
+
+        span.set_status(Status(StatusCode.ERROR, str(exc)))
+        span.record_exception(exc)
+    except Exception:
+        pass
 
 
 class StructuredLLMTransportError(RuntimeError):
@@ -71,14 +141,13 @@ class LiteLLMStructuredLLM:
             "json_schema": {"name": response_model.__name__, "schema": schema},
         }
 
-        tracer = get_tracer()
         span_attrs = {
             "llm.request.model": self.model,
             "llm.provider": _normalize_provider(self.model),
         }
         start = time.monotonic()
 
-        with tracer.start_as_current_span("llm.completion", attributes=span_attrs) as span:
+        with _make_span_ctx("llm.completion", attributes=span_attrs) as span:
             try:
                 response = litellm.completion(
                     model=self.model,
@@ -92,8 +161,7 @@ class LiteLLMStructuredLLM:
                 span.set_attribute("llm.status", "error")
                 span.set_attribute("llm.error.type", type(exc).__name__)
                 span.set_attribute("llm.latency_ms", elapsed_ms)
-                span.set_status(Status(StatusCode.ERROR, str(exc)))
-                span.record_exception(exc)
+                _set_error_status(span, exc)
                 raise StructuredLLMTransportError(f"LLM call failed: {exc}") from exc
 
             elapsed_ms = (time.monotonic() - start) * 1000
