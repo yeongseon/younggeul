@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime, timezone
-from typing import Any, Literal
+from typing import Any, Literal, cast
 from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
@@ -31,8 +31,24 @@ from .nodes.round_summarizer import make_round_summarizer_node
 from .nodes.scenario_builder import make_scenario_builder_node
 from .nodes.world_initializer import make_world_initializer_node
 from .ports.snapshot_reader import SnapshotReader
+from .tracing import trace_node
 
 DEFAULT_MAX_ROUNDS = 3
+
+
+def _traced_node(
+    node_name: str,
+    node_fn: Any,
+) -> Any:
+    def wrapper(state: SimulationGraphState) -> dict[str, Any]:
+        run_meta = state.get("run_meta")
+        run_id = run_meta.run_id if run_meta is not None else None
+        round_no = state.get("round_no")
+
+        with trace_node(node_name, run_id=run_id, round_no=round_no):
+            return cast(dict[str, Any], node_fn(state))
+
+    return wrapper
 
 
 def build_simulation_graph(
@@ -69,17 +85,17 @@ def build_simulation_graph(
     citation_gate_node = make_citation_gate_node(_evidence_store, event_store)
     report_renderer_node = make_report_renderer_node(event_store)
 
-    graph.add_node("intake_planner", intake_planner_node)
-    graph.add_node("scenario_builder", scenario_builder_node)
-    graph.add_node("world_initializer", world_initializer_node)
-    graph.add_node("participant_decider", participant_decider_node)
-    graph.add_node("round_resolver", round_resolver_node)
-    graph.add_node("round_summarizer", round_summarizer_node)
-    graph.add_node("evidence_builder", evidence_builder_node)
-    graph.add_node("report_writer", report_writer_node)
-    graph.add_node("critic", _make_passthrough_stub(event_store, "critic"))
-    graph.add_node("citation_gate", citation_gate_node)
-    graph.add_node("report_renderer", report_renderer_node)
+    graph.add_node("intake_planner", _traced_node("intake_planner", intake_planner_node))
+    graph.add_node("scenario_builder", _traced_node("scenario_builder", scenario_builder_node))
+    graph.add_node("world_initializer", _traced_node("world_initializer", world_initializer_node))
+    graph.add_node("participant_decider", _traced_node("participant_decider", participant_decider_node))
+    graph.add_node("round_resolver", _traced_node("round_resolver", round_resolver_node))
+    graph.add_node("round_summarizer", _traced_node("round_summarizer", round_summarizer_node))
+    graph.add_node("evidence_builder", _traced_node("evidence_builder", evidence_builder_node))
+    graph.add_node("report_writer", _traced_node("report_writer", report_writer_node))
+    graph.add_node("critic", _traced_node("critic", _make_passthrough_stub(event_store, "critic")))
+    graph.add_node("citation_gate", _traced_node("citation_gate", citation_gate_node))
+    graph.add_node("report_renderer", _traced_node("report_renderer", report_renderer_node))
 
     graph.add_edge(START, "intake_planner")
     graph.add_edge("intake_planner", "scenario_builder")

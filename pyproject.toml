@@ -26,6 +26,14 @@ dev = [
   "mypy",
   "pre-commit",
   "pandas-stubs",
+  "opentelemetry-api>=1.20",
+  "opentelemetry-sdk>=1.20",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.20",
+]
+observability = [
+  "opentelemetry-api>=1.20",
+  "opentelemetry-sdk>=1.20",
+  "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
   "PublicDataReader>=1.1",
