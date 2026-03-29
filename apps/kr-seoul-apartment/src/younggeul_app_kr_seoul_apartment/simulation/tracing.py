@@ -12,6 +12,7 @@ from opentelemetry.trace import Span, Status, StatusCode, Tracer
 
 _TRACER_NAME = "younggeul.simulation"
 _initialized = False
+_provider: Any | None = None
 
 
 def _is_enabled() -> bool:
@@ -21,15 +22,17 @@ def _is_enabled() -> bool:
 def init_tracing() -> None:
     """Initialize OpenTelemetry tracing when OTEL is enabled."""
 
-    global _initialized
+    global _initialized, _provider
 
     if _initialized or not _is_enabled():
         return
 
+    from opentelemetry.sdk.resources import Resource
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter
 
-    provider = TracerProvider()
+    resource = Resource(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    provider = TracerProvider(resource=resource)
     exporter: SpanExporter
 
     otlp_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
@@ -43,7 +46,24 @@ def init_tracing() -> None:
 
     provider.add_span_processor(BatchSpanProcessor(exporter))
     trace.set_tracer_provider(provider)
+    _provider = provider
     _initialized = True
+
+
+def shutdown_tracing() -> None:
+    global _initialized, _provider
+
+    provider = _provider
+    if provider is None:
+        return
+
+    _provider = None
+    _initialized = False
+
+    try:
+        provider.force_flush()
+    finally:
+        provider.shutdown()
 
 
 def get_tracer() -> Tracer:

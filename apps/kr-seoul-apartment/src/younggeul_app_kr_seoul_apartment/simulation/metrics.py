@@ -15,6 +15,7 @@ except ImportError:
 _METER_NAME = "younggeul.simulation"
 DEFAULT_APP_LABEL = "kr-seoul-apartment"
 _initialized = False
+_provider: Any | None = None
 
 
 class CounterLike(Protocol):
@@ -61,6 +62,8 @@ _llm_request_duration_seconds: HistogramLike | None = None
 _llm_tokens_total: CounterLike | None = None
 _llm_cost_usd_total: CounterLike | None = None
 _citation_gate_failures_total: CounterLike | None = None
+_web_requests_total: CounterLike | None = None
+_web_request_duration_seconds: HistogramLike | None = None
 
 
 def _is_enabled() -> bool:
@@ -68,7 +71,7 @@ def _is_enabled() -> bool:
 
 
 def init_metrics() -> None:
-    global _initialized
+    global _initialized, _provider
 
     if _initialized or not _is_enabled() or otel_metrics is None:
         return
@@ -80,6 +83,7 @@ def init_metrics() -> None:
             MetricExporter,
             PeriodicExportingMetricReader,
         )
+        from opentelemetry.sdk.resources import Resource
     except ImportError:
         return
 
@@ -97,9 +101,23 @@ def init_metrics() -> None:
         exporter = ConsoleMetricExporter()
 
     reader = PeriodicExportingMetricReader(exporter)
-    provider = MeterProvider(metric_readers=[reader])
+    resource = Resource(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    provider = MeterProvider(resource=resource, metric_readers=[reader])
     otel_metrics.set_meter_provider(provider)
+    _provider = provider
     _initialized = True
+
+
+def shutdown_metrics() -> None:
+    global _initialized, _provider
+
+    provider = _provider
+    if provider is None:
+        return
+
+    _provider = None
+    _initialized = False
+    provider.shutdown()
 
 
 def get_meter() -> MeterLike:
@@ -239,3 +257,36 @@ def citation_gate_failures_total() -> CounterLike:
     if counter is None:
         return _NoOpCounter()
     return counter
+
+
+
+def web_requests_total() -> CounterLike:
+    global _web_requests_total
+
+    if _web_requests_total is None:
+        _web_requests_total = get_meter().create_counter(
+            "web_requests_total",
+            description="Total number of web requests",
+            unit="{request}",
+        )
+
+    counter = _web_requests_total
+    if counter is None:
+        return _NoOpCounter()
+    return counter
+
+
+def web_request_duration_seconds() -> HistogramLike:
+    global _web_request_duration_seconds
+
+    if _web_request_duration_seconds is None:
+        _web_request_duration_seconds = get_meter().create_histogram(
+            "web_request_duration_seconds",
+            description="Duration of web requests",
+            unit="s",
+        )
+
+    histogram = _web_request_duration_seconds
+    if histogram is None:
+        return _NoOpHistogram()
+    return histogram
