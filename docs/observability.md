@@ -18,9 +18,24 @@ docker compose --profile obs up -d
 
 ## Service URLs
 
+All observability ports are bound to `127.0.0.1` (localhost only) by default.
+
 - Jaeger: http://localhost:16686
 - Prometheus: http://localhost:9090
 - Grafana: http://localhost:3000
+
+## Security
+
+The default `compose.yaml` is configured for **local development only**:
+
+- Grafana anonymous access is enabled with **Viewer** role (read-only).
+- All observability ports are bound to `127.0.0.1`.
+
+For shared or remote deployments:
+
+1. Set `GF_AUTH_ANONYMOUS_ENABLED=false` and configure proper authentication.
+2. Use a strong `GF_SECURITY_ADMIN_PASSWORD`.
+3. Place services behind a reverse proxy with TLS and access control.
 
 ## Environment variables (enable OTEL in app)
 
