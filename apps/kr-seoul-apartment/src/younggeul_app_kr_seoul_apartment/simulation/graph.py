@@ -8,10 +8,12 @@ from uuid import uuid4
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from .evidence.store import EvidenceStore, InMemoryEvidenceStore
 from .events import EventStore, SimulationEvent
 from .graph_state import SimulationGraphState
 from .llm.ports import StructuredLLM
 from .nodes.continue_gate import should_continue
+from .nodes.evidence_builder import make_evidence_builder_node
 from .nodes.intake_planner import make_intake_planner_node
 from .nodes.participant_decider import make_participant_decider_node
 from .nodes.round_resolver import make_round_resolver_node
@@ -36,8 +38,10 @@ def build_simulation_graph(
     default_max_rounds: int = DEFAULT_MAX_ROUNDS,
     structured_llm: StructuredLLM | None = None,
     snapshot_reader: SnapshotReader | None = None,
+    evidence_store: EvidenceStore | None = None,
 ) -> CompiledStateGraph[Any, Any, Any, Any]:
     graph = StateGraph(SimulationGraphState)
+    _evidence_store = evidence_store or InMemoryEvidenceStore()
 
     intake_planner_node = (
         make_intake_planner_node(event_store, structured_llm)
@@ -57,6 +61,7 @@ def build_simulation_graph(
     participant_decider_node = make_participant_decider_node(event_store)
     round_resolver_node = make_round_resolver_node(event_store)
     round_summarizer_node = make_round_summarizer_node(event_store)
+    evidence_builder_node = make_evidence_builder_node(_evidence_store)
 
     graph.add_node("intake_planner", intake_planner_node)
     graph.add_node("scenario_builder", scenario_builder_node)
@@ -64,6 +69,7 @@ def build_simulation_graph(
     graph.add_node("participant_decider", participant_decider_node)
     graph.add_node("round_resolver", round_resolver_node)
     graph.add_node("round_summarizer", round_summarizer_node)
+    graph.add_node("evidence_builder", evidence_builder_node)
     graph.add_node("report_writer", _make_report_writer_stub(event_store))
     graph.add_node("critic", _make_passthrough_stub(event_store, "critic"))
     graph.add_node("citation_gate", _make_passthrough_stub(event_store, "citation_gate"))
@@ -88,7 +94,8 @@ def build_simulation_graph(
             "round_summarizer": "round_summarizer",
         },
     )
-    graph.add_edge("round_summarizer", "report_writer")
+    graph.add_edge("round_summarizer", "evidence_builder")
+    graph.add_edge("evidence_builder", "report_writer")
     graph.add_edge("report_writer", "critic")
     graph.add_edge("critic", "citation_gate")
     graph.add_edge("citation_gate", END)

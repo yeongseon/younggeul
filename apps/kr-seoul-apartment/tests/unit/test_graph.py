@@ -192,7 +192,7 @@ def test_passthrough_stubs_only_add_event_refs() -> None:
     final = graph.invoke(_make_seed(run_id, max_rounds=0))
 
     assert final["warnings"] == []
-    assert final["evidence_refs"] == []
+    assert final["evidence_refs"]
     assert len(final["report_claims"]) == 1
     critic_events = store.get_events_by_type(run_id, "CRITIC")
     citation_events = store.get_events_by_type(run_id, "CITATION_GATE")
@@ -225,6 +225,7 @@ def test_mermaid_smoke() -> None:
     assert "participant_decider" in mermaid
     assert "round_resolver" in mermaid
     assert "round_summarizer" in mermaid
+    assert "evidence_builder" in mermaid
     assert "report_writer" in mermaid
     assert "critic" in mermaid
     assert "citation_gate" in mermaid
@@ -273,6 +274,16 @@ def test_multiple_runs_with_same_graph_independent() -> None:
     assert final_a["round_no"] == 1
     assert final_b["round_no"] == 3
     assert set(final_a["event_refs"]).isdisjoint(set(final_b["event_refs"]))
+
+
+def test_evidence_refs_populated_after_run() -> None:
+    store = InMemoryEventStore()
+    graph = build_simulation_graph(store)
+
+    final = graph.invoke(_make_seed("run-evidence-refs", max_rounds=2))
+
+    assert isinstance(final["evidence_refs"], list)
+    assert final["evidence_refs"]
 
 
 def test_world_initializer_stub_uses_existing_snapshot_when_present() -> None:
