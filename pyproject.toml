@@ -46,6 +46,7 @@ kr-seoul-apartment = [
 docs = [
   "mkdocs-material>=9.0",
   "mkdocs>=1.5",
+  "mkdocstrings[python]>=0.25",
 ]
 
 [tool.hatch.build.targets.wheel]

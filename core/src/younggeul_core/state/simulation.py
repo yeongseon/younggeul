@@ -123,9 +123,6 @@ class ScenarioSpec(BaseModel):
     def validate_target_period(self) -> "ScenarioSpec":
         """Validate that the scenario end date is not earlier than the start date.
 
-        Args:
-            self: The instance to validate.
-
         Returns:
             The validated instance.
 

@@ -55,8 +55,8 @@ def retry(
         The return value of fn on success.
 
     Raises:
-        The last exception encountered after exhausting all attempts,
-        or NonRetryableError immediately.
+        ConnectorError: After exhausting all retry attempts.
+        NonRetryableError: Immediately on non-retryable errors.
     """
     last_exception: Exception | None = None
 

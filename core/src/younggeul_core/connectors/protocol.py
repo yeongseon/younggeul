@@ -28,9 +28,8 @@ class ConnectorResult(Generic[TRec]):
 class Connector(Protocol[TReq, TRec]):
     """Protocol that all data connectors must satisfy.
 
-    Type Parameters:
-        TReq: The request model type (defines what to fetch).
-        TRec: The Bronze record model type (defines what is returned).
+    Generic over ``TReq`` (request model — defines what to fetch) and
+    ``TRec`` (Bronze record model — defines what is returned).
     """
 
     source_id: ClassVar[str]

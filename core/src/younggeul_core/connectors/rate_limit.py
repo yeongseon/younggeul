@@ -26,9 +26,6 @@ class RateLimiter:
     def min_interval(self) -> float:
         """Return the configured minimum interval in seconds.
 
-        Args:
-            None: This property does not accept parameters.
-
         Returns:
             The minimum interval value in seconds.
         """
