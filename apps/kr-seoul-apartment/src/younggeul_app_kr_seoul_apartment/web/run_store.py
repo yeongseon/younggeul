@@ -1,11 +1,19 @@
 from __future__ import annotations
 
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import uuid4
 
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
+
+_VALID_TRANSITIONS: dict[str, set[str]] = {
+    "pending": {"running", "failed"},
+    "running": {"completed", "failed"},
+}
 
 
 class RunMeta(BaseModel):
@@ -44,6 +52,12 @@ class RunStore:
         report: str | None = None,
     ) -> None:
         meta = self._read_meta(run_id)
+        current = meta.status
+        target = status
+        allowed = _VALID_TRANSITIONS.get(current)
+        if allowed is None or target not in allowed:
+            raise ValueError(f"Invalid state transition: {current} -> {target}")
+
         completed_at = meta.completed_at
         if status in {"completed", "failed"}:
             completed_at = datetime.now(timezone.utc)
@@ -53,6 +67,30 @@ class RunStore:
 
         if report is not None:
             self._report_path(run_id).write_text(report, encoding="utf-8")
+
+    def reconcile_stale_runs(self) -> int:
+        if not self.base_dir.exists():
+            return 0
+
+        reconciled_count = 0
+        for run in self.list_runs():
+            if run.status not in {"running", "pending"}:
+                continue
+
+            reconciled_count += 1
+            logger.info("Reconciling stale run %s with status %s", run.run_id, run.status)
+            stale_meta = run.model_copy(
+                update={
+                    "status": "failed",
+                    "error": "interrupted by restart",
+                    "completed_at": datetime.now(timezone.utc),
+                }
+            )
+            self._write_meta(run.run_id, stale_meta)
+
+        if reconciled_count > 0:
+            logger.warning("Reconciled %s stale simulation runs", reconciled_count)
+        return reconciled_count
 
     def get_run(self, run_id: str) -> RunMeta | None:
         meta_path = self._meta_path(run_id)

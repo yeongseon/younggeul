@@ -34,6 +34,31 @@ def test_update_status_changes_status(tmp_path: Path) -> None:
     assert run_meta.status == "running"
 
 
+def test_update_status_allows_pending_running_completed_transition(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("test")
+
+    store.update_status(run_id, "running")
+    store.update_status(run_id, "completed")
+
+    run_meta = store.get_run(run_id)
+    assert run_meta is not None
+    assert run_meta.status == "completed"
+    assert run_meta.completed_at is not None
+
+
+def test_update_status_rejects_invalid_pending_to_completed_transition(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("test")
+
+    try:
+        store.update_status(run_id, "completed")
+    except ValueError as exc:
+        assert str(exc) == "Invalid state transition: pending -> completed"
+    else:
+        raise AssertionError("Expected ValueError for invalid state transition")
+
+
 def test_get_run_returns_run_meta(tmp_path: Path) -> None:
     store = RunStore(base_dir=tmp_path)
     run_id = store.create_run("test")
@@ -75,6 +100,7 @@ def test_update_status_with_report_writes_report_md(tmp_path: Path) -> None:
     run_id = store.create_run("report")
     markdown_report = "# Simulation Report\n\n내용"
 
+    store.update_status(run_id, "running")
     store.update_status(run_id, "completed", report=markdown_report)
 
     report_path = tmp_path / run_id / "report.md"
@@ -84,3 +110,52 @@ def test_update_status_with_report_writes_report_md(tmp_path: Path) -> None:
     assert run_meta is not None
     assert run_meta.status == "completed"
     assert run_meta.completed_at is not None
+
+
+def test_reconcile_stale_runs_marks_running_runs_failed(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("running")
+    store.update_status(run_id, "running")
+
+    reconciled = store.reconcile_stale_runs()
+
+    run_meta = store.get_run(run_id)
+    assert reconciled == 1
+    assert run_meta is not None
+    assert run_meta.status == "failed"
+    assert run_meta.error == "interrupted by restart"
+    assert run_meta.completed_at is not None
+
+
+def test_reconcile_stale_runs_marks_pending_runs_failed(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("pending")
+
+    reconciled = store.reconcile_stale_runs()
+
+    run_meta = store.get_run(run_id)
+    assert reconciled == 1
+    assert run_meta is not None
+    assert run_meta.status == "failed"
+    assert run_meta.error == "interrupted by restart"
+    assert run_meta.completed_at is not None
+
+
+def test_reconcile_stale_runs_skips_completed_and_failed_runs(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    completed_run_id = store.create_run("completed")
+    failed_run_id = store.create_run("failed")
+
+    store.update_status(completed_run_id, "running")
+    store.update_status(completed_run_id, "completed")
+    store.update_status(failed_run_id, "failed")
+
+    reconciled = store.reconcile_stale_runs()
+
+    completed_meta = store.get_run(completed_run_id)
+    failed_meta = store.get_run(failed_run_id)
+    assert reconciled == 0
+    assert completed_meta is not None
+    assert completed_meta.status == "completed"
+    assert failed_meta is not None
+    assert failed_meta.status == "failed"

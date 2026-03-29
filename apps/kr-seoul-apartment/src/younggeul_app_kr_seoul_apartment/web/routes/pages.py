@@ -9,6 +9,7 @@ from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
+from ..config import validate_max_rounds, validate_model_id
 from ..run_store import RunMeta, RunStore
 from ..services import forecast_baseline_service, resolve_snapshot_service, run_simulation_background
 
@@ -74,6 +75,15 @@ class RunStoreLike(Protocol):
 
     def create_run(self, query: str) -> str: ...
 
+    def update_status(
+        self,
+        run_id: str,
+        status: str,
+        *,
+        error: str | None = None,
+        report: str | None = None,
+    ) -> None: ...
+
 
 @router.get("/", response_class=HTMLResponse)
 @router.get("/dashboard", response_class=HTMLResponse)
@@ -111,18 +121,28 @@ async def simulate_start(request: Request) -> HTMLResponse:
         max_rounds = 3
     model_id = form_payload.get("model_id", "stub") or "stub"
 
+    try:
+        validate_model_id(model_id)
+        validate_max_rounds(max_rounds)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)) from exc
+
     run_store = cast(RunStoreLike, _state(request).run_store)
     executor = _state(request).executor
 
     run_id = run_store.create_run(query)
-    _ = executor.submit(
-        run_simulation_background,
-        cast(RunStore, run_store),
-        run_id,
-        query,
-        max_rounds,
-        model_id,
-    )
+    try:
+        _ = executor.submit(
+            run_simulation_background,
+            cast(RunStore, run_store),
+            run_id,
+            query,
+            max_rounds,
+            model_id,
+        )
+    except Exception as exc:
+        run_store.update_status(run_id, "failed", error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
     context = {
         "request": request,

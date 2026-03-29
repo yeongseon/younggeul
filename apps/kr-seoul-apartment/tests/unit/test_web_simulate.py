@@ -39,6 +39,90 @@ def test_post_simulate_returns_202_with_run_id(tmp_path: Path, monkeypatch: pyte
         assert payload["status"] == "pending"
 
 
+def test_post_simulate_accepts_valid_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_background(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    monkeypatch.setattr(simulate_routes, "run_simulation_background", fake_background)
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 3, "model_id": "gpt-4o-mini"},
+        )
+
+        assert response.status_code == 202
+
+
+def test_post_simulate_rejects_invalid_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_background(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    monkeypatch.setattr(simulate_routes, "run_simulation_background", fake_background)
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 3, "model_id": "unknown-model"},
+        )
+
+        assert response.status_code == 422
+        assert "model_id 'unknown-model' is not allowed" in response.text
+
+
+def test_post_simulate_rejects_max_rounds_over_limit(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_background(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    monkeypatch.setattr(simulate_routes, "run_simulation_background", fake_background)
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 11, "model_id": "stub"},
+        )
+
+        assert response.status_code == 422
+        assert "max_rounds must be between 1 and 10" in response.text
+
+
+def test_post_simulate_rejects_max_rounds_below_one(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_background(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    monkeypatch.setattr(simulate_routes, "run_simulation_background", fake_background)
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 0, "model_id": "stub"},
+        )
+
+        assert response.status_code == 422
+        assert "max_rounds must be between 1 and 10" in response.text
+
+
+def test_post_simulate_respects_allowed_models_env_override(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def fake_background(*args: object, **kwargs: object) -> None:
+        _ = (args, kwargs)
+
+    monkeypatch.setattr(simulate_routes, "run_simulation_background", fake_background)
+    monkeypatch.setenv("YOUNGGEUL_ALLOWED_MODELS", "custom-model")
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        accepted_response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 3, "model_id": "custom-model"},
+        )
+        rejected_response = client.post(
+            "/simulate",
+            json={"query": "강남구", "max_rounds": 3, "model_id": "stub"},
+        )
+
+        assert accepted_response.status_code == 202
+        assert rejected_response.status_code == 422
+
+
 def test_get_simulate_by_run_id_returns_status(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def fake_background(*args: object, **kwargs: object) -> None:
         _ = (args, kwargs)
@@ -107,3 +191,32 @@ def test_full_background_simulation_lifecycle(tmp_path: Path, monkeypatch: pytes
             time.sleep(0.01)
 
         assert final_payload["status"] == "completed"
+
+
+def test_post_simulate_marks_failed_when_executor_submit_raises(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    class FailingExecutor:
+        def __init__(self, max_workers: int) -> None:
+            _ = max_workers
+
+        def submit(self, *args: object, **kwargs: object) -> None:
+            _ = (args, kwargs)
+            raise RuntimeError("executor unavailable")
+
+        def shutdown(self, wait: bool = True) -> None:
+            _ = wait
+
+    monkeypatch.setattr(web_app, "ThreadPoolExecutor", FailingExecutor)
+
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post("/simulate", json={"query": "강남구"})
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "executor unavailable"}
+
+    store = RunStore(base_dir=tmp_path / "runs")
+    runs = store.list_runs()
+    assert len(runs) == 1
+    assert runs[0].status == "failed"
+    assert runs[0].error == "executor unavailable"

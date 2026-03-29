@@ -3,11 +3,15 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
+import logging
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
+from ..simulation.metrics import init_metrics
+from ..simulation.tracing import init_tracing
+from .middleware import MetricsMiddleware
 from .run_store import RunStore
 from .routes.baseline import router as baseline_router
 from .routes.health import router as health_router
@@ -16,11 +20,20 @@ from .routes.simulate import router as simulate_router
 from .routes.snapshot import router as snapshot_router
 
 
+logger = logging.getLogger(__name__)
+
+
 @asynccontextmanager
 async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
+    init_tracing()
+    init_metrics()
     executor = ThreadPoolExecutor(max_workers=2)
     app.state.executor = executor
-    app.state.run_store = RunStore(base_dir=Path("./output/runs"))
+    run_store = RunStore(base_dir=Path("./output/runs"))
+    app.state.run_store = run_store
+    reconciled_count = run_store.reconcile_stale_runs()
+    if reconciled_count > 0:
+        logger.warning("Reconciled %s stale runs on startup", reconciled_count)
     app.state.templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
     try:
         yield
@@ -30,6 +43,7 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 def create_app() -> FastAPI:
     app = FastAPI(title="영끌 시뮬레이터", version="0.2.0", lifespan=app_lifespan)
+    app.add_middleware(MetricsMiddleware)
     app.include_router(health_router)
     app.include_router(simulate_router)
     app.include_router(snapshot_router)

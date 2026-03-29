@@ -30,6 +30,7 @@ ReportClaim = simulation_state_module.ReportClaim
 
 def _reset_metric_singletons() -> None:
     setattr(metrics_module, "_initialized", False)
+    setattr(metrics_module, "_provider", None)
     setattr(metrics_module, "_simulation_runs_total", None)
     setattr(metrics_module, "_simulation_duration_seconds", None)
     setattr(metrics_module, "_simulation_node_duration_seconds", None)
@@ -38,6 +39,8 @@ def _reset_metric_singletons() -> None:
     setattr(metrics_module, "_llm_tokens_total", None)
     setattr(metrics_module, "_llm_cost_usd_total", None)
     setattr(metrics_module, "_citation_gate_failures_total", None)
+    setattr(metrics_module, "_web_requests_total", None)
+    setattr(metrics_module, "_web_request_duration_seconds", None)
 
 
 def _choice(content: str, *, finish_reason: str = "stop") -> SimpleNamespace:
@@ -55,11 +58,13 @@ def test_init_metrics_and_get_meter_work() -> None:
         patch("opentelemetry.sdk.metrics.MeterProvider") as meter_provider_cls,
         patch("opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader") as metric_reader_cls,
         patch("opentelemetry.sdk.metrics.export.ConsoleMetricExporter") as exporter_cls,
+        patch("opentelemetry.sdk.resources.Resource") as resource_cls,
         patch("opentelemetry.metrics.set_meter_provider") as set_meter_provider,
     ):
         provider = meter_provider_cls.return_value
         reader = metric_reader_cls.return_value
         exporter = exporter_cls.return_value
+        resource = resource_cls.return_value
 
         metrics_module.init_metrics()
         metrics_module.init_metrics()
@@ -67,7 +72,12 @@ def test_init_metrics_and_get_meter_work() -> None:
 
     exporter_cls.assert_called_once()
     metric_reader_cls.assert_called_once_with(exporter)
-    meter_provider_cls.assert_called_once_with(metric_readers=[reader])
+    meter_provider_cls.assert_called_once()
+    _, meter_provider_kwargs = meter_provider_cls.call_args
+    assert meter_provider_kwargs["metric_readers"] == [reader]
+    if resource_cls.call_count > 0:
+        resource_cls.assert_called_once_with(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+        assert meter_provider_kwargs.get("resource") is resource
     set_meter_provider.assert_called_once_with(provider)
     assert getattr(metrics_module, "_initialized") is True
     assert meter is not None
@@ -356,3 +366,70 @@ def test_citation_gate_does_not_emit_failure_counter_when_no_failures() -> None:
         citation_gate_module.make_citation_gate_node(evidence_store, event_store)(state)
 
     failure_counter.add.assert_not_called()
+
+
+def test_shutdown_tracing_is_safe_when_not_initialized() -> None:
+    if not hasattr(tracing_module, "shutdown_tracing"):
+        return
+
+    setattr(tracing_module, "_initialized", False)
+    setattr(tracing_module, "_provider", None)
+
+    tracing_module.shutdown_tracing()
+
+
+def test_shutdown_metrics_is_safe_when_not_initialized() -> None:
+    if not hasattr(metrics_module, "shutdown_metrics"):
+        return
+
+    _reset_metric_singletons()
+
+    metrics_module.shutdown_metrics()
+
+
+def test_shutdown_tracing_flushes_and_shuts_down_provider() -> None:
+    if not hasattr(tracing_module, "shutdown_tracing"):
+        return
+
+    setattr(tracing_module, "_initialized", False)
+    setattr(tracing_module, "_provider", None)
+
+    with (
+        patch.dict("os.environ", {"OTEL_ENABLED": "true"}, clear=False),
+        patch("opentelemetry.sdk.trace.TracerProvider") as tracer_provider_cls,
+        patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"),
+        patch("opentelemetry.sdk.trace.export.ConsoleSpanExporter"),
+        patch("opentelemetry.sdk.resources.Resource"),
+        patch("opentelemetry.trace.set_tracer_provider"),
+    ):
+        provider = tracer_provider_cls.return_value
+        tracing_module.init_tracing()
+        tracing_module.shutdown_tracing()
+
+    provider.force_flush.assert_called_once_with()
+    provider.shutdown.assert_called_once_with()
+    assert getattr(tracing_module, "_provider") is None
+    assert getattr(tracing_module, "_initialized") is False
+
+
+def test_shutdown_metrics_shuts_down_provider() -> None:
+    if not hasattr(metrics_module, "shutdown_metrics"):
+        return
+
+    _reset_metric_singletons()
+
+    with (
+        patch.dict("os.environ", {"OTEL_ENABLED": "true"}, clear=False),
+        patch("opentelemetry.sdk.metrics.MeterProvider") as meter_provider_cls,
+        patch("opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader"),
+        patch("opentelemetry.sdk.metrics.export.ConsoleMetricExporter"),
+        patch("opentelemetry.sdk.resources.Resource"),
+        patch("opentelemetry.metrics.set_meter_provider"),
+    ):
+        provider = meter_provider_cls.return_value
+        metrics_module.init_metrics()
+        metrics_module.shutdown_metrics()
+
+    provider.shutdown.assert_called_once_with()
+    assert getattr(metrics_module, "_provider") is None
+    assert getattr(metrics_module, "_initialized") is False

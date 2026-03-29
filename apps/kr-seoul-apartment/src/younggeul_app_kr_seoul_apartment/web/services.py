@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -21,6 +22,8 @@ from younggeul_core.state.simulation import SnapshotRef
 from younggeul_core.storage.snapshot import SnapshotManifest
 
 from .run_store import RunStore
+
+logger = logging.getLogger(__name__)
 
 
 def run_pipeline_service(bronze: BronzeInput) -> PipelineResult:
@@ -63,6 +66,7 @@ def run_simulation_background(run_store: RunStore, run_id: str, query: str, max_
         report = _extract_report_text(final_state, event_store, run_id)
         run_store.update_status(run_id, "completed", report=report)
     except Exception as exc:
+        logger.exception("Simulation %s failed", run_id)
         run_store.update_status(run_id, "failed", error=str(exc))
 
 

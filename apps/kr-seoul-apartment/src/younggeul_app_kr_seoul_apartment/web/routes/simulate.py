@@ -3,8 +3,9 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from ..config import get_allowed_models, validate_max_rounds, validate_model_id
 from ..run_store import RunMeta
 from ..services import run_simulation_background
 
@@ -14,7 +15,16 @@ router = APIRouter(prefix="/simulate", tags=["simulate"])
 class SimulateRequest(BaseModel):
     query: str
     max_rounds: int = Field(default=3)
-    model_id: str = Field(default="stub")
+    model_id: str = Field(
+        default="stub",
+        description=f"Allowed model IDs: {', '.join(get_allowed_models())}",
+    )
+
+    @model_validator(mode="after")
+    def validate_inputs(self) -> SimulateRequest:
+        validate_model_id(self.model_id)
+        validate_max_rounds(self.max_rounds)
+        return self
 
 
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
@@ -23,14 +33,18 @@ async def create_simulation_run(request: Request, payload: SimulateRequest) -> d
     executor = request.app.state.executor
 
     run_id = run_store.create_run(payload.query)
-    executor.submit(
-        run_simulation_background,
-        run_store,
-        run_id,
-        payload.query,
-        payload.max_rounds,
-        payload.model_id,
-    )
+    try:
+        executor.submit(
+            run_simulation_background,
+            run_store,
+            run_id,
+            payload.query,
+            payload.max_rounds,
+            payload.model_id,
+        )
+    except Exception as exc:
+        run_store.update_status(run_id, "failed", error=str(exc))
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
     return {"run_id": run_id, "status": "pending"}
 
 

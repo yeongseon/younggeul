@@ -90,3 +90,14 @@ def test_get_ui_partials_runs_returns_html_fragment(tmp_path: Path, monkeypatch:
     assert response.status_code == 200
     assert response.headers["content-type"].startswith("text/html")
     assert "<tr>" in response.text
+
+
+def test_post_ui_simulate_rejects_invalid_model_id(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    with _create_client(tmp_path, monkeypatch) as client:
+        response = client.post(
+            "/ui/simulate",
+            data={"query": "강남구", "max_rounds": "3", "model_id": "not-allowed"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"].startswith("model_id 'not-allowed' is not allowed")
