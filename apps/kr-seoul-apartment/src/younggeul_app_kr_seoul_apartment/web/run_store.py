@@ -32,9 +32,7 @@ class RunStore:
             status="pending",
             created_at=datetime.now(timezone.utc),
         )
-        self._meta_path(run_id).write_text(
-            json.dumps(meta.model_dump(mode="json"), ensure_ascii=False), encoding="utf-8"
-        )
+        self._write_meta(run_id, meta)
         return run_id
 
     def update_status(
@@ -51,10 +49,7 @@ class RunStore:
             completed_at = datetime.now(timezone.utc)
 
         updated = meta.model_copy(update={"status": status, "error": error, "completed_at": completed_at})
-        self._meta_path(run_id).write_text(
-            json.dumps(updated.model_dump(mode="json"), ensure_ascii=False),
-            encoding="utf-8",
-        )
+        self._write_meta(run_id, updated)
 
         if report is not None:
             self._report_path(run_id).write_text(report, encoding="utf-8")
@@ -85,6 +80,13 @@ class RunStore:
 
     def _report_path(self, run_id: str) -> Path:
         return self.base_dir / run_id / "report.md"
+
+    def _write_meta(self, run_id: str, meta: RunMeta) -> None:
+        meta_path = self._meta_path(run_id)
+        temp_path = meta_path.with_suffix(".tmp")
+        payload = json.dumps(meta.model_dump(mode="json"), ensure_ascii=False)
+        temp_path.write_text(payload, encoding="utf-8")
+        temp_path.replace(meta_path)
 
     def _read_meta(self, run_id: str) -> RunMeta:
         meta_path = self._meta_path(run_id)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -8,6 +9,7 @@ import pytest
 from younggeul_app_kr_seoul_apartment.pipeline import BronzeInput
 from younggeul_app_kr_seoul_apartment.simulation.event_store import InMemoryEventStore
 from younggeul_app_kr_seoul_apartment.web import services
+from younggeul_app_kr_seoul_apartment.web.run_store import RunStore
 
 
 def test_run_pipeline_service_passes_through(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -80,3 +82,55 @@ def test_seed_graph_state_service_passes_through(monkeypatch: pytest.MonkeyPatch
 
     monkeypatch.setattr(services, "seed_graph_state", fake_seed_graph_state)
     assert services.seed_graph_state_service("q", "r", "name", "model") == payload
+
+
+def test_run_simulation_background_completes_and_writes_report(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("q")
+
+    class FakeGraph:
+        def invoke(self, initial_state: dict[str, object]) -> dict[str, object]:
+            assert initial_state["max_rounds"] == 2
+            return {
+                "rendered_report": {
+                    "run_id": run_id,
+                    "round_no": 2,
+                    "rendered_at": datetime.now(timezone.utc).isoformat(),
+                    "total_claims": 1,
+                    "passed_claims": 1,
+                    "failed_claims": 0,
+                    "sections": [],
+                    "markdown": "# Simulation Report\n\nOK",
+                }
+            }
+
+    monkeypatch.setattr(services, "build_simulation_graph", lambda *_args, **_kwargs: FakeGraph())
+
+    services.run_simulation_background(store, run_id, "query", 2, "stub")
+
+    run_meta = store.get_run(run_id)
+    assert run_meta is not None
+    assert run_meta.status == "completed"
+    assert run_meta.completed_at is not None
+    report_file = tmp_path / run_id / "report.md"
+    assert report_file.read_text(encoding="utf-8") == "# Simulation Report\n\nOK"
+
+
+def test_run_simulation_background_marks_failed_on_exception(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    run_id = store.create_run("q")
+
+    class FakeGraph:
+        def invoke(self, initial_state: dict[str, object]) -> dict[str, object]:
+            _ = initial_state
+            raise RuntimeError("boom")
+
+    monkeypatch.setattr(services, "build_simulation_graph", lambda *_args, **_kwargs: FakeGraph())
+
+    services.run_simulation_background(store, run_id, "query", 3, "stub")
+
+    run_meta = store.get_run(run_id)
+    assert run_meta is not None
+    assert run_meta.status == "failed"
+    assert run_meta.error is not None
+    assert "boom" in run_meta.error
