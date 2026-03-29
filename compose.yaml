@@ -10,8 +10,15 @@ services:
       - "127.0.0.1:4318:4318"
     expose:
       - "8889"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
-      - jaeger
+      jaeger:
+        condition: service_healthy
 
   jaeger:
     profiles: [obs]
@@ -26,6 +33,12 @@ services:
       default:
         aliases:
           - jaeger-otlp
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:16687/"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   prometheus:
     profiles: [obs]
@@ -34,8 +47,15 @@ services:
       - ./infra/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     ports:
       - "127.0.0.1:9090:9090"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_healthy
 
   # NOTE: Grafana is configured for LOCAL DEVELOPMENT only.
   # For shared/remote deployments, disable anonymous access and set a strong admin password.
@@ -50,8 +70,15 @@ services:
       - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
     ports:
       - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
-      - prometheus
+      prometheus:
+        condition: service_healthy
 
   web:
     profiles: [web]
@@ -64,6 +91,12 @@ services:
       - ./output:/app/output
     environment:
       OTEL_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   web-obs:
     profiles: [web-obs]
@@ -78,5 +111,12 @@ services:
       OTEL_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       OTEL_EXPORTER_OTLP_INSECURE: "true"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
-      - otel-collector
+      otel-collector:
+        condition: service_healthy
