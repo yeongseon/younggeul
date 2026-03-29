@@ -123,12 +123,12 @@ def make_report_writer_node(evidence_store: EvidenceStore, event_store: EventSto
 
         role_summary: dict[str, dict[str, int]] = {}
         for participant in participants.values():
-            role_key = participant.role
-            if role_key not in role_summary:
-                role_summary[role_key] = {"count": 0, "total_capital": 0, "total_holdings": 0}
-            role_summary[role_key]["count"] += 1
-            role_summary[role_key]["total_capital"] += participant.capital
-            role_summary[role_key]["total_holdings"] += participant.holdings
+            role_str: str = participant.role
+            if role_str not in role_summary:
+                role_summary[role_str] = {"count": 0, "total_capital": 0, "total_holdings": 0}
+            role_summary[role_str]["count"] += 1
+            role_summary[role_str]["total_capital"] += participant.capital
+            role_summary[role_str]["total_holdings"] += participant.holdings
 
         for role_key, summary in sorted(role_summary.items()):
             by_subject = _sorted_records(evidence_store.get_by_subject("participant_role", role_key))

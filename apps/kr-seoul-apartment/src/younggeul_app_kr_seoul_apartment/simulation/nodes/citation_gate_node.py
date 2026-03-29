@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Literal
 from uuid import uuid4
 
 from younggeul_core.state.simulation import ReportClaim
@@ -78,7 +78,7 @@ def make_citation_gate_node(evidence_store: EvidenceStore, event_store: EventSto
                 if not any(record.round_no == round_no for record in resolved_records):
                     failure_reason = f"no evidence for round_no={round_no}"
 
-            gate_status = "failed" if failure_reason is not None else "passed"
+            gate_status: Literal["passed", "failed"] = "failed" if failure_reason is not None else "passed"
             validated_claims.append(
                 ReportClaim(
                     claim_id=claim.claim_id,
