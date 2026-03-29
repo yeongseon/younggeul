@@ -57,8 +57,10 @@ def test_round_loop_executes_exactly_n_rounds(max_rounds: int) -> None:
 
     final = graph.invoke(_make_seed(run_id, max_rounds=max_rounds))
 
-    round_events = store.get_events_by_type(run_id, "ROUND_COMPLETED")
-    assert len(round_events) == max_rounds
+    decisions_events = store.get_events_by_type(run_id, "DECISIONS_MADE")
+    resolved_events = store.get_events_by_type(run_id, "ROUND_RESOLVED")
+    assert len(decisions_events) == max_rounds
+    assert len(resolved_events) == max_rounds
     assert final["round_no"] == max_rounds
 
 
@@ -69,7 +71,8 @@ def test_round_loop_zero_rounds_skips_to_report() -> None:
     final = graph.invoke(_make_seed("run-zero", max_rounds=0))
 
     assert final["round_no"] == 0
-    assert store.get_events_by_type("run-zero", "ROUND_COMPLETED") == []
+    assert store.get_events_by_type("run-zero", "DECISIONS_MADE") == []
+    assert store.get_events_by_type("run-zero", "ROUND_RESOLVED") == []
 
 
 def test_stubs_emit_events_to_store() -> None:
@@ -79,7 +82,7 @@ def test_stubs_emit_events_to_store() -> None:
 
     graph.invoke(_make_seed("run-event-count", max_rounds=max_rounds))
 
-    assert store.count("run-event-count") == 6 + max_rounds
+    assert store.count("run-event-count") == 6 + (2 * max_rounds)
 
 
 def test_event_types_emitted() -> None:
@@ -94,7 +97,8 @@ def test_event_types_emitted() -> None:
         "INTAKE_PLANNED",
         "SCENARIO_BUILT",
         "WORLD_INITIALIZED",
-        "ROUND_COMPLETED",
+        "DECISIONS_MADE",
+        "ROUND_RESOLVED",
         "REPORT_WRITTEN",
         "CRITIC",
         "CITATION_GATE",
@@ -134,21 +138,23 @@ def test_world_initializer_stub_sets_world_and_participants() -> None:
     assert final["world"]["11680"].gu_name == "강남구"
     assert "p-001" in final["participants"]
     assert final["participants"]["p-001"].role == "buyer"
+    assert "p-002" in final["participants"]
+    assert final["participants"]["p-002"].role == "investor"
 
 
-def test_round_runner_stub_increments_round_no() -> None:
+def test_round_loop_sets_round_no_after_n_rounds() -> None:
     store = InMemoryEventStore()
     graph = build_simulation_graph(store)
     run_id = "run-increment"
 
     final = graph.invoke(_make_seed(run_id, max_rounds=3))
 
-    round_events = store.get_events_by_type(run_id, "ROUND_COMPLETED")
-    assert [event.round_no for event in round_events] == [1, 2, 3]
+    resolved_events = store.get_events_by_type(run_id, "ROUND_RESOLVED")
+    assert [event.round_no for event in resolved_events] == [1, 2, 3]
     assert final["round_no"] == 3
 
 
-def test_round_runner_stub_sets_last_outcome() -> None:
+def test_round_loop_sets_last_outcome() -> None:
     store = InMemoryEventStore()
     graph = build_simulation_graph(store)
 
@@ -208,7 +214,8 @@ def test_mermaid_smoke() -> None:
     assert "intake_planner" in mermaid
     assert "scenario_builder" in mermaid
     assert "world_initializer" in mermaid
-    assert "round_runner" in mermaid
+    assert "participant_decider" in mermaid
+    assert "round_resolver" in mermaid
     assert "report_writer" in mermaid
     assert "critic" in mermaid
     assert "citation_gate" in mermaid
@@ -252,8 +259,8 @@ def test_multiple_runs_with_same_graph_independent() -> None:
     final_a = graph.invoke(_make_seed("run-a", max_rounds=1))
     final_b = graph.invoke(_make_seed("run-b", max_rounds=3))
 
-    assert store.count("run-a") == 7
-    assert store.count("run-b") == 9
+    assert store.count("run-a") == 8
+    assert store.count("run-b") == 12
     assert final_a["round_no"] == 1
     assert final_b["round_no"] == 3
     assert set(final_a["event_refs"]).isdisjoint(set(final_b["event_refs"]))

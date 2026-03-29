@@ -10,7 +10,6 @@ from langgraph.graph.state import CompiledStateGraph
 from younggeul_core.state.simulation import (
     ParticipantState,
     ReportClaim,
-    RoundOutcome,
     ScenarioSpec,
     SegmentState,
     SnapshotRef,
@@ -19,7 +18,10 @@ from younggeul_core.state.simulation import (
 from .events import EventStore, SimulationEvent
 from .graph_state import SimulationGraphState
 from .llm.ports import StructuredLLM
+from .nodes.continue_gate import should_continue
 from .nodes.intake_planner import make_intake_planner_node
+from .nodes.participant_decider import make_participant_decider_node
+from .nodes.round_resolver import make_round_resolver_node
 from .nodes.scenario_builder import make_scenario_builder_node
 from .nodes.world_initializer import make_world_initializer_node
 from .ports.snapshot_reader import SnapshotReader
@@ -51,11 +53,14 @@ def build_simulation_graph(
         if snapshot_reader is not None
         else _make_world_initializer_stub(event_store, default_max_rounds)
     )
+    participant_decider_node = make_participant_decider_node(event_store)
+    round_resolver_node = make_round_resolver_node(event_store)
 
     graph.add_node("intake_planner", intake_planner_node)
     graph.add_node("scenario_builder", scenario_builder_node)
     graph.add_node("world_initializer", world_initializer_node)
-    graph.add_node("round_runner", _make_round_runner_stub(event_store))
+    graph.add_node("participant_decider", participant_decider_node)
+    graph.add_node("round_resolver", round_resolver_node)
     graph.add_node("report_writer", _make_report_writer_stub(event_store))
     graph.add_node("critic", _make_passthrough_stub(event_store, "critic"))
     graph.add_node("citation_gate", _make_passthrough_stub(event_store, "citation_gate"))
@@ -65,17 +70,18 @@ def build_simulation_graph(
     graph.add_edge("scenario_builder", "world_initializer")
     graph.add_conditional_edges(
         "world_initializer",
-        _should_continue,
+        _should_start_rounds,
         {
-            "round_runner": "round_runner",
+            "participant_decider": "participant_decider",
             "report_writer": "report_writer",
         },
     )
+    graph.add_edge("participant_decider", "round_resolver")
     graph.add_conditional_edges(
-        "round_runner",
-        _should_continue,
+        "round_resolver",
+        _route_after_resolve,
         {
-            "round_runner": "round_runner",
+            "participant_decider": "participant_decider",
             "report_writer": "report_writer",
         },
     )
@@ -86,10 +92,14 @@ def build_simulation_graph(
     return graph.compile()
 
 
-def _should_continue(state: SimulationGraphState) -> Literal["round_runner", "report_writer"]:
+def _should_start_rounds(state: SimulationGraphState) -> Literal["participant_decider", "report_writer"]:
     round_no = state.get("round_no", 0)
     max_rounds = state.get("max_rounds", DEFAULT_MAX_ROUNDS)
-    return "round_runner" if round_no < max_rounds else "report_writer"
+    return "participant_decider" if round_no < max_rounds else "report_writer"
+
+
+def _route_after_resolve(state: SimulationGraphState) -> Literal["participant_decider", "report_writer"]:
+    return "participant_decider" if should_continue(state) == "continue" else "report_writer"
 
 
 def _append_event(
@@ -165,7 +175,7 @@ def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: in
                 current_median_price=2_000_000,
                 current_volume=100,
                 price_trend="flat",
-                sentiment_index=0.5,
+                sentiment_index=0.7,
                 supply_pressure=0.0,
             )
         }
@@ -173,11 +183,19 @@ def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: in
             "p-001": ParticipantState(
                 participant_id="p-001",
                 role="buyer",
-                capital=1_000_000,
+                capital=1_000_000_000_000,
                 holdings=0,
                 sentiment="neutral",
                 risk_tolerance=0.5,
-            )
+            ),
+            "p-002": ParticipantState(
+                participant_id="p-002",
+                role="investor",
+                capital=0,
+                holdings=100,
+                sentiment="neutral",
+                risk_tolerance=0.5,
+            ),
         }
 
         event_id = _append_event(
@@ -196,25 +214,6 @@ def _make_world_initializer_stub(event_store: EventStore, default_max_rounds: in
             "governance_actions": {},
             "market_actions": {},
             "last_outcome": None,
-            "event_refs": [event_id],
-        }
-
-    return node
-
-
-def _make_round_runner_stub(event_store: EventStore) -> Any:
-    def node(state: SimulationGraphState) -> dict[str, Any]:
-        next_round = state.get("round_no", 0) + 1
-        event_id = _append_event(event_store, state, "ROUND_COMPLETED", round_no=next_round)
-        return {
-            "round_no": next_round,
-            "last_outcome": RoundOutcome(
-                round_no=next_round,
-                cleared_volume={"11680": 1},
-                price_changes={"11680": 0.0},
-                governance_applied=[],
-                market_actions_resolved=1,
-            ),
             "event_refs": [event_id],
         }
 
