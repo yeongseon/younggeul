@@ -1,5 +1,6 @@
 from datetime import timezone
 from importlib import import_module
+from typing import Any
 
 import pytest
 from langgraph.graph.state import CompiledStateGraph
@@ -20,8 +21,8 @@ ScenarioSpec = simulation_state_module.ScenarioSpec
 SnapshotRef = simulation_state_module.SnapshotRef
 
 
-def _make_seed(run_id: str, *, max_rounds: int | None = None) -> SimulationGraphState:
-    state = seed_graph_state(
+def _make_seed(run_id: str, *, max_rounds: int | None = None) -> dict[str, Any]:
+    state: dict[str, Any] = seed_graph_state(
         user_query="강남구 아파트 시장 시뮬레이션",
         run_id=run_id,
         run_name=f"run-{run_id}",
@@ -49,7 +50,7 @@ def test_graph_runs_end_to_end() -> None:
     assert final["intake_plan"]["planner_status"] == "stub"
     assert isinstance(final["scenario"], ScenarioSpec)
     assert final["round_no"] == 2
-    assert len(final["report_claims"]) == 1
+    assert len(final["report_claims"]) >= 5
 
     simulation_state = to_simulation_state(final)
     assert simulation_state["max_rounds"] == 2
@@ -172,19 +173,19 @@ def test_round_loop_sets_last_outcome() -> None:
     assert final["last_outcome"].round_no == 1
 
 
-def test_report_writer_stub_appends_claim() -> None:
+def test_report_writer_generates_structured_claims() -> None:
     store = InMemoryEventStore()
     graph = build_simulation_graph(store)
 
     final = graph.invoke(_make_seed("run-report", max_rounds=0))
 
-    assert len(final["report_claims"]) == 1
-    claim = final["report_claims"][0]
-    assert claim.claim_json == {"summary": "stub report"}
-    assert claim.gate_status == "passed"
+    assert len(final["report_claims"]) >= 5
+    claim_types = {claim.claim_json["type"] for claim in final["report_claims"]}
+    assert claim_types >= {"direction", "volume", "participant_summary", "risk_factors", "simulation_overview"}
+    assert {claim.gate_status for claim in final["report_claims"]} == {"pending"}
 
 
-def test_passthrough_stubs_only_add_event_refs() -> None:
+def test_critic_stub_and_citation_gate_add_events_without_claim_duplication() -> None:
     store = InMemoryEventStore()
     graph = build_simulation_graph(store)
     run_id = "run-passthrough"
@@ -193,13 +194,18 @@ def test_passthrough_stubs_only_add_event_refs() -> None:
 
     assert final["warnings"] == []
     assert final["evidence_refs"]
-    assert len(final["report_claims"]) == 1
+    assert len(final["report_claims"]) >= 5
     critic_events = store.get_events_by_type(run_id, "CRITIC")
     citation_events = store.get_events_by_type(run_id, "CITATION_GATE")
     assert len(critic_events) == 1
     assert len(citation_events) == 1
     assert critic_events[0].payload == {}
-    assert citation_events[0].payload == {}
+    assert citation_events[0].payload == {
+        "total_claims": len(final["report_claims"]),
+        "passed": len(final["report_claims"]),
+        "failed": 0,
+        "failed_claim_ids": [],
+    }
 
 
 def test_final_state_convertible_to_simulation_state() -> None:
