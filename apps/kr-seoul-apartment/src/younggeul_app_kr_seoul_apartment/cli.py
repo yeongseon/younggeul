@@ -24,7 +24,9 @@ from .simulation.event_store import InMemoryEventStore
 from .simulation.evidence.store import InMemoryEvidenceStore
 from .simulation.graph import build_simulation_graph
 from .simulation.graph_state import seed_graph_state
+from .simulation.metrics import init_metrics, shutdown_metrics
 from .simulation.schemas.report import RenderedReport
+from .simulation.tracing import init_tracing, shutdown_tracing
 from .snapshot import publish_snapshot, resolve_snapshot
 
 
@@ -35,6 +37,17 @@ def _output(ctx: click.Context, data: dict[str, Any], text_lines: list[str]) -> 
 
     for line in text_lines:
         click.echo(line)
+
+
+def _shutdown_observability() -> None:
+    try:
+        shutdown_tracing()
+    except Exception:
+        pass
+    try:
+        shutdown_metrics()
+    except Exception:
+        pass
 
 
 def _emit_version(ctx: click.Context, _: click.Option, value: bool) -> None:
@@ -197,6 +210,9 @@ def main(ctx: click.Context, output: str) -> None:
     """Run the top-level Younggeul CLI group."""
     ctx.ensure_object(dict)
     ctx.obj["output"] = output
+    init_tracing()
+    init_metrics()
+    ctx.call_on_close(_shutdown_observability)
 
 
 @main.command("ingest")

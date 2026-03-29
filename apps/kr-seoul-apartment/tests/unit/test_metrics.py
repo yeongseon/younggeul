@@ -72,12 +72,8 @@ def test_init_metrics_and_get_meter_work() -> None:
 
     exporter_cls.assert_called_once()
     metric_reader_cls.assert_called_once_with(exporter)
-    meter_provider_cls.assert_called_once()
-    _, meter_provider_kwargs = meter_provider_cls.call_args
-    assert meter_provider_kwargs["metric_readers"] == [reader]
-    if resource_cls.call_count > 0:
-        resource_cls.assert_called_once_with(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
-        assert meter_provider_kwargs.get("resource") is resource
+    resource_cls.assert_called_once_with(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    meter_provider_cls.assert_called_once_with(metric_readers=[reader], resource=resource)
     set_meter_provider.assert_called_once_with(provider)
     assert getattr(metrics_module, "_initialized") is True
     assert meter is not None
@@ -369,9 +365,6 @@ def test_citation_gate_does_not_emit_failure_counter_when_no_failures() -> None:
 
 
 def test_shutdown_tracing_is_safe_when_not_initialized() -> None:
-    if not hasattr(tracing_module, "shutdown_tracing"):
-        return
-
     setattr(tracing_module, "_initialized", False)
     setattr(tracing_module, "_provider", None)
 
@@ -379,18 +372,12 @@ def test_shutdown_tracing_is_safe_when_not_initialized() -> None:
 
 
 def test_shutdown_metrics_is_safe_when_not_initialized() -> None:
-    if not hasattr(metrics_module, "shutdown_metrics"):
-        return
-
     _reset_metric_singletons()
 
     metrics_module.shutdown_metrics()
 
 
 def test_shutdown_tracing_flushes_and_shuts_down_provider() -> None:
-    if not hasattr(tracing_module, "shutdown_tracing"):
-        return
-
     setattr(tracing_module, "_initialized", False)
     setattr(tracing_module, "_provider", None)
 
@@ -413,9 +400,6 @@ def test_shutdown_tracing_flushes_and_shuts_down_provider() -> None:
 
 
 def test_shutdown_metrics_shuts_down_provider() -> None:
-    if not hasattr(metrics_module, "shutdown_metrics"):
-        return
-
     _reset_metric_singletons()
 
     with (
@@ -433,3 +417,40 @@ def test_shutdown_metrics_shuts_down_provider() -> None:
     provider.shutdown.assert_called_once_with()
     assert getattr(metrics_module, "_provider") is None
     assert getattr(metrics_module, "_initialized") is False
+
+
+def test_init_metrics_uses_resource() -> None:
+    _reset_metric_singletons()
+
+    with (
+        patch.dict("os.environ", {"OTEL_ENABLED": "true"}, clear=False),
+        patch("opentelemetry.sdk.metrics.MeterProvider") as meter_provider_cls,
+        patch("opentelemetry.sdk.metrics.export.PeriodicExportingMetricReader"),
+        patch("opentelemetry.sdk.metrics.export.ConsoleMetricExporter"),
+        patch("opentelemetry.sdk.resources.Resource") as resource_cls,
+        patch("opentelemetry.metrics.set_meter_provider"),
+    ):
+        resource = resource_cls.return_value
+        metrics_module.init_metrics()
+
+    _, kwargs = meter_provider_cls.call_args
+    assert kwargs["resource"] is resource
+
+
+def test_init_tracing_uses_resource() -> None:
+    setattr(tracing_module, "_initialized", False)
+    setattr(tracing_module, "_provider", None)
+
+    with (
+        patch.dict("os.environ", {"OTEL_ENABLED": "true"}, clear=False),
+        patch("opentelemetry.sdk.trace.TracerProvider") as tracer_provider_cls,
+        patch("opentelemetry.sdk.trace.export.BatchSpanProcessor"),
+        patch("opentelemetry.sdk.trace.export.ConsoleSpanExporter"),
+        patch("opentelemetry.sdk.resources.Resource") as resource_cls,
+        patch("opentelemetry.trace.set_tracer_provider"),
+    ):
+        resource = resource_cls.return_value
+        tracing_module.init_tracing()
+
+    _, kwargs = tracer_provider_cls.call_args
+    assert kwargs["resource"] is resource

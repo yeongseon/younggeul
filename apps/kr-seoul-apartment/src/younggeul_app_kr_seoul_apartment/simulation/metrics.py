@@ -15,6 +15,7 @@ except ImportError:
 _METER_NAME = "younggeul.simulation"
 DEFAULT_APP_LABEL = "kr-seoul-apartment"
 _initialized = False
+_provider: Any = None
 
 
 class CounterLike(Protocol):
@@ -68,7 +69,7 @@ def _is_enabled() -> bool:
 
 
 def init_metrics() -> None:
-    global _initialized
+    global _initialized, _provider
 
     if _initialized or not _is_enabled() or otel_metrics is None:
         return
@@ -80,6 +81,7 @@ def init_metrics() -> None:
             MetricExporter,
             PeriodicExportingMetricReader,
         )
+        from opentelemetry.sdk.resources import Resource
     except ImportError:
         return
 
@@ -97,9 +99,25 @@ def init_metrics() -> None:
         exporter = ConsoleMetricExporter()
 
     reader = PeriodicExportingMetricReader(exporter)
-    provider = MeterProvider(metric_readers=[reader])
+    resource = Resource(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    provider = MeterProvider(metric_readers=[reader], resource=resource)
     otel_metrics.set_meter_provider(provider)
+    _provider = provider
     _initialized = True
+
+
+def shutdown_metrics() -> None:
+    global _initialized, _provider
+
+    if _provider is None:
+        return
+
+    try:
+        _provider.shutdown()
+    except Exception:
+        pass
+    _provider = None
+    _initialized = False
 
 
 def get_meter() -> MeterLike:

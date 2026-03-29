@@ -9,8 +9,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
-from ..simulation.metrics import init_metrics
-from ..simulation.tracing import init_tracing
+from ..simulation.metrics import init_metrics, shutdown_metrics
+from ..simulation.tracing import init_tracing, shutdown_tracing
 from .middleware import MetricsMiddleware
 from .run_store import RunStore
 from .routes.baseline import router as baseline_router
@@ -38,6 +38,14 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        try:
+            shutdown_tracing()
+        except Exception:
+            pass
+        try:
+            shutdown_metrics()
+        except Exception:
+            pass
         executor.shutdown(wait=True)
 
 
