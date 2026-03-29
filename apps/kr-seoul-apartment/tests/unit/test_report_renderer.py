@@ -134,7 +134,7 @@ def test_orders_unknown_sections_alphabetically_after_known_sections() -> None:
     assert [section.section_key for section in rendered.sections] == ["summary", "alpha", "beta", "zeta"]
 
 
-def test_only_passed_claims_appear_in_rendered_sections() -> None:
+def test_passed_and_pending_claims_appear_in_rendered_sections() -> None:
     store = InMemoryEventStore()
     node = make_report_renderer_node(store)
     claims = [
@@ -147,11 +147,11 @@ def test_only_passed_claims_appear_in_rendered_sections() -> None:
     payload = _rendered_event(store, "run-passed-only")["payload"]
     rendered = RenderedReport.model_validate(payload["rendered_report"])
 
-    assert rendered.sections[0].claim_count == 1
-    assert [entry.claim_id for entry in rendered.sections[0].claims] == ["c-passed"]
+    assert rendered.sections[0].claim_count == 2
+    assert [entry.claim_id for entry in rendered.sections[0].claims] == ["c-passed", "c-pending"]
 
 
-def test_non_passed_claims_are_returned_as_warnings() -> None:
+def test_only_failed_and_repaired_claims_are_returned_as_warnings() -> None:
     store = InMemoryEventStore()
     node = make_report_renderer_node(store)
     claims = [
@@ -164,7 +164,6 @@ def test_non_passed_claims_are_returned_as_warnings() -> None:
 
     assert result["warnings"] == [
         "Claim c-1 failed: failed",
-        "Claim c-2 failed: pending",
         "Claim c-3 failed: repaired",
     ]
 

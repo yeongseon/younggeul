@@ -33,8 +33,8 @@ def make_report_renderer_node(event_store: EventStore) -> Any:
         round_no = state.get("round_no", 0)
         rendered_at = datetime.now(timezone.utc)
 
-        passed_claims = [claim for claim in report_claims if claim.gate_status == "passed"]
-        blocked_claims = [claim for claim in report_claims if claim.gate_status != "passed"]
+        passed_claims = [claim for claim in report_claims if claim.gate_status in ("passed", "pending")]
+        blocked_claims = [claim for claim in report_claims if claim.gate_status not in ("passed", "pending")]
 
         section_entries: dict[str, list[RenderedClaimEntry]] = defaultdict(list)
         for claim in passed_claims:
