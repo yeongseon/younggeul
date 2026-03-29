@@ -94,9 +94,9 @@ Alert rules are provisioned from:
 Configured rules:
 
 1. **HighSimulationFailureRate**
-   - Expression: `rate(younggeul_simulation_runs_total{status="error"}[5m]) / rate(younggeul_simulation_runs_total[5m]) > 0.5`
+   - Expression: `(sum(rate(younggeul_simulation_runs_total{status="error"}[5m])) / sum(rate(younggeul_simulation_runs_total[5m]))) > 0.3 and sum(rate(younggeul_simulation_runs_total[5m])) > 0.01`
    - For: `5m`
-   - Meaning: more than 50% of recent simulations are failing.
+   - Meaning: more than 30% of recent simulations are failing (aggregated across all status labels), with at least 0.01 runs/sec total volume.
 
 2. **HighLLMLatency**
    - Expression: `histogram_quantile(0.95, rate(younggeul_llm_request_duration_seconds_bucket[5m])) > 30`
@@ -104,9 +104,14 @@ Configured rules:
    - Meaning: p95 LLM latency is above 30 seconds.
 
 3. **CitationGateFailureSpike**
-   - Expression: `rate(younggeul_citation_gate_failures_total[5m]) > 0.1`
+   - Expression: `sum(rate(younggeul_citation_gate_failures_total[5m])) > 0.1 and sum(increase(younggeul_citation_gate_failures_total[5m])) > 3`
    - For: `5m`
-   - Meaning: citation gate failures are spiking.
+   - Meaning: citation gate failures are spiking (aggregated across all labels) with a minimum absolute count guard (> 3 failures in 5m).
+
+4. **StuckRunningSimulation**
+   - Expression: `younggeul_simulation_active_runs > 0`
+   - For: `10m`
+   - Meaning: a simulation has been in running state for more than 10 minutes (requires `simulation_active_runs` UpDownCounter from job-system metrics).
 
 ## Architecture diagram
 
