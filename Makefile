@@ -1,4 +1,4 @@
-.PHONY: install lint format test test-all test-contract clean help
+.PHONY: install lint format test test-all test-contract clean help demo
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -31,3 +31,6 @@ clean: ## Remove build artifacts
 	find . -type d -name .pytest_cache -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name "*.egg-info" -exec rm -rf {} + 2>/dev/null || true
 	rm -rf dist/ build/ coverage.xml .coverage
+
+demo: ## Run end-to-end demo
+	bash scripts/demo.sh

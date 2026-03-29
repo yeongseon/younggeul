@@ -15,6 +15,7 @@ data/gold/**
 data/snapshots/**
 !data/.gitkeep
 eval_results/
+demo_output/
 
 # IDE
 .vscode/
