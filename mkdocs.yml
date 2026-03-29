@@ -82,6 +82,9 @@ nav:
     - Data Plane: architecture/data-plane.md
     - Simulation Plane: architecture/simulation-plane.md
     - Evidence-Gated Reporting: architecture/reporting.md
+  - Tutorials:
+    - How to Add a Connector: tutorials/add-connector.md
+    - How to Add a Simulation Node: tutorials/add-node.md
   - ADRs:
     - ADR-001 Clean-Room Development: adr/001-clean-room-development.md
     - ADR-002 Monorepo Boundaries: adr/002-monorepo-boundaries.md
