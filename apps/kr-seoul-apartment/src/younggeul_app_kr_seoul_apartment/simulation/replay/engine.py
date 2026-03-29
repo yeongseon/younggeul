@@ -124,10 +124,73 @@ def _handle_world_initialized(
     return _append_warnings(state, _warning_list(event.payload))
 
 
+def _handle_decisions_made(
+    state: SimulationGraphState,
+    event: SimulationEvent,
+    context: ReplayContext,
+) -> SimulationGraphState:
+    _ = context
+    next_state = _copy_state(state)
+
+    round_no = event.payload.get("round_no")
+    if isinstance(round_no, int):
+        next_state["round_no"] = round_no
+
+    action_summary = event.payload.get("action_summary")
+    if isinstance(action_summary, dict):
+        next_state["market_actions"] = action_summary
+
+    return next_state
+
+
+def _handle_round_resolved(
+    state: SimulationGraphState,
+    event: SimulationEvent,
+    context: ReplayContext,
+) -> SimulationGraphState:
+    _ = context
+    next_state = _copy_state(state)
+
+    round_no = event.payload.get("round_no")
+    if isinstance(round_no, int):
+        next_state["round_no"] = round_no
+
+    transactions_count = event.payload.get("transactions_count")
+    summary = event.payload.get("summary")
+    if isinstance(transactions_count, int) and isinstance(summary, str):
+        simulation_mod = import_module("younggeul_core.state.simulation")
+        round_outcome = simulation_mod.RoundOutcome(
+            round_no=round_no if isinstance(round_no, int) else 0,
+            cleared_volume={},
+            price_changes={},
+            governance_applied=[],
+            market_actions_resolved=transactions_count,
+        )
+        next_state["last_outcome"] = round_outcome
+
+    return _append_warnings(next_state, _warning_list(event.payload))
+
+
+def _handle_simulation_completed(
+    state: SimulationGraphState,
+    event: SimulationEvent,
+    context: ReplayContext,
+) -> SimulationGraphState:
+    _ = context
+    next_state = _copy_state(state)
+    total_rounds = event.payload.get("total_rounds")
+    if isinstance(total_rounds, int):
+        next_state["round_no"] = total_rounds
+    return next_state
+
+
 HANDLERS: dict[str, EventHandler] = {
     "INTAKE_PLANNED": _handle_intake_planned,
     "SCENARIO_BUILT": _handle_scenario_built,
     "WORLD_INITIALIZED": _handle_world_initialized,
+    "DECISIONS_MADE": _handle_decisions_made,
+    "ROUND_RESOLVED": _handle_round_resolved,
+    "SIMULATION_COMPLETED": _handle_simulation_completed,
 }
 
 

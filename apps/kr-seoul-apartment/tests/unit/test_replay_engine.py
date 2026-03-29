@@ -23,6 +23,7 @@ IntakePlan = intake_module.IntakePlan
 ParticipantRosterSpec = roster_module.ParticipantRosterSpec
 RoleBucketSpec = roster_module.RoleBucketSpec
 ScenarioSpec = simulation_state_module.ScenarioSpec
+RoundOutcome = simulation_state_module.RoundOutcome
 
 
 def _event(
@@ -109,6 +110,41 @@ def _world_payload(**overrides: Any) -> dict[str, Any]:
     return payload
 
 
+def _decisions_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "round_no": 2,
+        "action_summary": {
+            "buyer-0001": {"action_type": "buy", "target": "11680"},
+            "investor-0001": {"action_type": "hold", "target": "11650"},
+        },
+        "total_actions": 2,
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _round_resolved_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "round_no": 2,
+        "transactions_count": 3,
+        "summary": "Round 2 resolved with 3 transactions",
+        "warnings": ["resolver warning"],
+    }
+    payload.update(overrides)
+    return payload
+
+
+def _simulation_completed_payload(**overrides: Any) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "total_rounds": 4,
+        "world_summary": {"11680": {"median_price": 2_100_000, "volume": 110}},
+        "participant_summary": {"buyer": {"count": 1, "total_capital": 100, "total_holdings": 0}},
+        "total_warnings": 0,
+    }
+    payload.update(overrides)
+    return payload
+
+
 class TestReplayEngine:
     def test_replay_all_supported_events_returns_full_result(self) -> None:
         store = InMemoryEventStore()
@@ -129,6 +165,77 @@ class TestReplayEngine:
         assert result.world_summary is not None
         assert result.participant_count == 12
         assert result.anchor_period == "2025-12"
+
+    def test_decisions_made_handler_sets_round_no_and_market_actions_summary(self) -> None:
+        store = InMemoryEventStore()
+        store.append(
+            _event(event_id="evt-1", event_type="DECISIONS_MADE", payload=_decisions_payload(), offset_seconds=0)
+        )
+
+        result = ReplayEngine(store).replay("run-001")
+
+        assert result.state["round_no"] == 2
+        assert result.state["market_actions"] == _decisions_payload()["action_summary"]
+
+    def test_round_resolved_handler_sets_round_no_and_last_outcome(self) -> None:
+        store = InMemoryEventStore()
+        store.append(
+            _event(event_id="evt-1", event_type="ROUND_RESOLVED", payload=_round_resolved_payload(), offset_seconds=0)
+        )
+
+        result = ReplayEngine(store).replay("run-001")
+
+        assert result.state["round_no"] == 2
+        assert isinstance(result.state["last_outcome"], RoundOutcome)
+        assert result.state["last_outcome"].round_no == 2
+        assert result.state["last_outcome"].market_actions_resolved == 3
+        assert result.state["warnings"] == ["resolver warning"]
+
+    def test_simulation_completed_handler_sets_final_round_no(self) -> None:
+        store = InMemoryEventStore()
+        store.append(
+            _event(
+                event_id="evt-1",
+                event_type="SIMULATION_COMPLETED",
+                payload=_simulation_completed_payload(total_rounds=7),
+            )
+        )
+
+        result = ReplayEngine(store).replay("run-001")
+
+        assert result.state["round_no"] == 7
+
+    def test_replay_m6_event_stream_including_round_events_and_completion(self) -> None:
+        store = InMemoryEventStore()
+        store.append(_event(event_id="evt-1", event_type="INTAKE_PLANNED", payload=_intake_payload(), offset_seconds=0))
+        store.append(
+            _event(event_id="evt-2", event_type="SCENARIO_BUILT", payload=_scenario_payload(), offset_seconds=1)
+        )
+        store.append(
+            _event(event_id="evt-3", event_type="WORLD_INITIALIZED", payload=_world_payload(), offset_seconds=2)
+        )
+        store.append(
+            _event(event_id="evt-4", event_type="DECISIONS_MADE", payload=_decisions_payload(), offset_seconds=3)
+        )
+        store.append(
+            _event(event_id="evt-5", event_type="ROUND_RESOLVED", payload=_round_resolved_payload(), offset_seconds=4)
+        )
+        store.append(
+            _event(
+                event_id="evt-6",
+                event_type="SIMULATION_COMPLETED",
+                payload=_simulation_completed_payload(total_rounds=2),
+                offset_seconds=5,
+            )
+        )
+
+        result = ReplayEngine(store).replay("run-001", strict=True)
+
+        assert result.completeness == "full"
+        assert result.event_count == 6
+        assert result.state["round_no"] == 2
+        assert result.state["market_actions"] == _decisions_payload()["action_summary"]
+        assert isinstance(result.state["last_outcome"], RoundOutcome)
 
     def test_replay_intake_only_is_partial(self) -> None:
         store = InMemoryEventStore()
@@ -360,7 +467,14 @@ class TestReplayEngine:
         assert result.participant_count == 33
 
     def test_handlers_registry_contains_required_event_types(self) -> None:
-        assert set(HANDLERS.keys()) == {"INTAKE_PLANNED", "SCENARIO_BUILT", "WORLD_INITIALIZED"}
+        assert set(HANDLERS.keys()) == {
+            "INTAKE_PLANNED",
+            "SCENARIO_BUILT",
+            "WORLD_INITIALIZED",
+            "DECISIONS_MADE",
+            "ROUND_RESOLVED",
+            "SIMULATION_COMPLETED",
+        }
 
     def test_replay_context_defaults_to_strict(self) -> None:
         context = ReplayContext()

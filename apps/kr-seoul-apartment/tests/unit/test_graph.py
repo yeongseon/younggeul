@@ -1,16 +1,23 @@
 from datetime import timezone
+from importlib import import_module
 
 import pytest
 from langgraph.graph.state import CompiledStateGraph
 
-from younggeul_app_kr_seoul_apartment.simulation.event_store import InMemoryEventStore
-from younggeul_app_kr_seoul_apartment.simulation.graph import DEFAULT_MAX_ROUNDS, build_simulation_graph
-from younggeul_app_kr_seoul_apartment.simulation.graph_state import (
-    SimulationGraphState,
-    seed_graph_state,
-    to_simulation_state,
-)
-from younggeul_core.state.simulation import RoundOutcome, ScenarioSpec, SnapshotRef
+event_store_module = import_module("younggeul_app_kr_seoul_apartment.simulation.event_store")
+graph_module = import_module("younggeul_app_kr_seoul_apartment.simulation.graph")
+graph_state_module = import_module("younggeul_app_kr_seoul_apartment.simulation.graph_state")
+simulation_state_module = import_module("younggeul_core.state.simulation")
+
+InMemoryEventStore = event_store_module.InMemoryEventStore
+DEFAULT_MAX_ROUNDS = graph_module.DEFAULT_MAX_ROUNDS
+build_simulation_graph = graph_module.build_simulation_graph
+SimulationGraphState = graph_state_module.SimulationGraphState
+seed_graph_state = graph_state_module.seed_graph_state
+to_simulation_state = graph_state_module.to_simulation_state
+RoundOutcome = simulation_state_module.RoundOutcome
+ScenarioSpec = simulation_state_module.ScenarioSpec
+SnapshotRef = simulation_state_module.SnapshotRef
 
 
 def _make_seed(run_id: str, *, max_rounds: int | None = None) -> SimulationGraphState:
@@ -82,7 +89,7 @@ def test_stubs_emit_events_to_store() -> None:
 
     graph.invoke(_make_seed("run-event-count", max_rounds=max_rounds))
 
-    assert store.count("run-event-count") == 6 + (2 * max_rounds)
+    assert store.count("run-event-count") == 7 + (2 * max_rounds)
 
 
 def test_event_types_emitted() -> None:
@@ -99,6 +106,7 @@ def test_event_types_emitted() -> None:
         "WORLD_INITIALIZED",
         "DECISIONS_MADE",
         "ROUND_RESOLVED",
+        "SIMULATION_COMPLETED",
         "REPORT_WRITTEN",
         "CRITIC",
         "CITATION_GATE",
@@ -216,6 +224,7 @@ def test_mermaid_smoke() -> None:
     assert "world_initializer" in mermaid
     assert "participant_decider" in mermaid
     assert "round_resolver" in mermaid
+    assert "round_summarizer" in mermaid
     assert "report_writer" in mermaid
     assert "critic" in mermaid
     assert "citation_gate" in mermaid
@@ -259,8 +268,8 @@ def test_multiple_runs_with_same_graph_independent() -> None:
     final_a = graph.invoke(_make_seed("run-a", max_rounds=1))
     final_b = graph.invoke(_make_seed("run-b", max_rounds=3))
 
-    assert store.count("run-a") == 8
-    assert store.count("run-b") == 12
+    assert store.count("run-a") == 9
+    assert store.count("run-b") == 13
     assert final_a["round_no"] == 1
     assert final_b["round_no"] == 3
     assert set(final_a["event_refs"]).isdisjoint(set(final_b["event_refs"]))
