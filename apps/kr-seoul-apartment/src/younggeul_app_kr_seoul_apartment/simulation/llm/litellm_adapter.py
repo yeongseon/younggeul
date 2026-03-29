@@ -11,6 +11,13 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel, ValidationError
 
+from ..metrics import (
+    llm_cost_usd_total,
+    llm_request_duration_seconds,
+    llm_requests_total,
+    llm_tokens_total,
+    metric_attrs,
+)
 from .ports import LLMMessage
 
 T = TypeVar("T", bound=BaseModel)
@@ -145,6 +152,8 @@ class LiteLLMStructuredLLM:
             "llm.request.model": self.model,
             "llm.provider": _normalize_provider(self.model),
         }
+        provider = _normalize_provider(self.model)
+        request_metric_attrs = metric_attrs(provider=provider, model=self.model)
         start = time.monotonic()
 
         with _make_span_ctx("llm.completion", attributes=span_attrs) as span:
@@ -158,6 +167,11 @@ class LiteLLMStructuredLLM:
                 )
             except Exception as exc:
                 elapsed_ms = (time.monotonic() - start) * 1000
+                llm_requests_total().add(
+                    1,
+                    attributes=metric_attrs(provider=provider, model=self.model, status="error"),
+                )
+                llm_request_duration_seconds().record(elapsed_ms / 1000, attributes=request_metric_attrs)
                 span.set_attribute("llm.status", "error")
                 span.set_attribute("llm.error.type", type(exc).__name__)
                 span.set_attribute("llm.latency_ms", elapsed_ms)
@@ -170,6 +184,8 @@ class LiteLLMStructuredLLM:
                 span.set_attribute("llm.response.model", actual_model)
 
             usage = getattr(response, "usage", None)
+            prompt_tokens: int | float | None = None
+            completion_tokens: int | float | None = None
             if usage is not None:
                 prompt_tokens = (
                     usage.get("prompt_tokens") if isinstance(usage, dict) else getattr(usage, "prompt_tokens", None)
@@ -191,8 +207,11 @@ class LiteLLMStructuredLLM:
                     span.set_attribute("llm.total_tokens", total_tokens)
 
             hidden_params = getattr(response, "_hidden_params", None)
+            cost_usd: float | None = None
             if isinstance(hidden_params, dict):
-                cost_usd = hidden_params.get("response_cost")
+                raw_cost_usd = hidden_params.get("response_cost")
+                if isinstance(raw_cost_usd, int | float):
+                    cost_usd = float(raw_cost_usd)
                 if cost_usd is not None:
                     span.set_attribute("llm.cost_usd", cost_usd)
 
@@ -204,6 +223,25 @@ class LiteLLMStructuredLLM:
 
             span.set_attribute("llm.status", "success")
             span.set_attribute("llm.latency_ms", elapsed_ms)
+
+            llm_requests_total().add(
+                1,
+                attributes=metric_attrs(provider=provider, model=self.model, status="success"),
+            )
+            llm_request_duration_seconds().record(elapsed_ms / 1000, attributes=request_metric_attrs)
+
+            if isinstance(prompt_tokens, int | float):
+                llm_tokens_total().add(
+                    prompt_tokens,
+                    attributes=metric_attrs(provider=provider, model=self.model, token_type="prompt"),
+                )
+            if isinstance(completion_tokens, int | float):
+                llm_tokens_total().add(
+                    completion_tokens,
+                    attributes=metric_attrs(provider=provider, model=self.model, token_type="completion"),
+                )
+            if cost_usd is not None:
+                llm_cost_usd_total().add(cost_usd, attributes=request_metric_attrs)
 
         raw_content = response.choices[0].message.content
         if raw_content is None:

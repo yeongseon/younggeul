@@ -13,6 +13,7 @@ from younggeul_core.state.simulation import ReportClaim
 from ..evidence.store import EvidenceRecord, EvidenceStore
 from ..events import EventStore, SimulationEvent
 from ..graph_state import SimulationGraphState
+from ..metrics import citation_gate_failures_total, metric_attrs
 
 
 def _matches_subject(
@@ -127,6 +128,9 @@ def make_citation_gate_node(evidence_store: EvidenceStore, event_store: EventSto
                 },
             )
         )
+
+        if failed > 0:
+            citation_gate_failures_total().add(failed, attributes=metric_attrs())
 
         return {"warnings": warnings, "event_refs": [event_id]}
 

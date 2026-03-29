@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import time
 from contextlib import contextmanager
 from typing import Any, Iterator
 
@@ -74,6 +75,8 @@ def trace_node(
         Active span context for the node execution block.
     """
     tracer = get_tracer()
+    started_at = time.monotonic()
+    status = "ok"
 
     span_attributes: dict[str, Any] = {"node.name": node_name}
     if run_id is not None:
@@ -90,6 +93,18 @@ def trace_node(
         try:
             yield span
         except Exception as exc:
+            status = "error"
             span.set_status(Status(StatusCode.ERROR, str(exc)))
             span.record_exception(exc)
             raise
+        finally:
+            elapsed = time.monotonic() - started_at
+            try:
+                from .metrics import metric_attrs, simulation_node_duration_seconds
+
+                simulation_node_duration_seconds().record(
+                    elapsed,
+                    attributes=metric_attrs(node=node_name, status=status),
+                )
+            except Exception:
+                pass
