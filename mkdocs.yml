@@ -1,0 +1,76 @@
+site_name: "Younggeul — 영끌 시뮬레이터"
+site_description: "Open-source, agent-based Korean real estate simulation platform"
+site_url: https://yeongseon.github.io/younggeul
+repo_url: https://github.com/yeongseon/younggeul
+repo_name: yeongseon/younggeul
+
+theme:
+  name: material
+  palette:
+    - scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+    - scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+
+extra:
+  social:
+    - icon: fontawesome/brands/github
+      link: https://github.com/yeongseon/younggeul
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: getting-started/installation.md
+    - Quick Start: getting-started/quickstart.md
+    - Demo: getting-started/demo.md
+  - User Guide:
+    - CLI Reference: guide/cli.md
+    - Data Pipeline: guide/data-pipeline.md
+    - Simulation: guide/simulation.md
+    - Evaluation: guide/evaluation.md
+  - Architecture:
+    - Overview: architecture/overview.md
+    - Data Plane: architecture/data-plane.md
+    - Simulation Plane: architecture/simulation-plane.md
+    - Evidence-Gated Reporting: architecture/reporting.md
+  - ADRs:
+    - ADR-001 Clean-Room Development: adr/001-clean-room-development.md
+    - ADR-002 Monorepo Boundaries: adr/002-monorepo-boundaries.md
+    - ADR-003 Immutable Snapshots: adr/003-immutable-dataset-snapshots.md
+    - ADR-004 LangGraph Boundaries: adr/004-langgraph-boundaries.md
+    - ADR-005 Evidence-Gated Reporting: adr/005-evidence-gated-reporting.md
+    - ADR-006 Public Data Policy: adr/006-public-data-policy.md
+  - Release Notes: release-notes.md

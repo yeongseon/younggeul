@@ -1,4 +1,4 @@
-.PHONY: install lint format test test-all test-contract clean help demo
+.PHONY: install lint format test test-all test-contract clean help demo docs docs-serve
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'
@@ -34,3 +34,9 @@ clean: ## Remove build artifacts
 
 demo: ## Run end-to-end demo
 	bash scripts/demo.sh
+
+docs: ## Build documentation
+	mkdocs build
+
+docs-serve: ## Serve documentation locally
+	mkdocs serve
