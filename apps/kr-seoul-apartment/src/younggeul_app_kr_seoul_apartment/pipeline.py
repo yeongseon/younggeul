@@ -7,6 +7,7 @@ from younggeul_core.state.gold import GoldDistrictMonthlyMetrics
 from younggeul_core.state.silver import SilverAptTransaction, SilverInterestRate, SilverMigration
 
 from younggeul_app_kr_seoul_apartment.transforms.gold_district import aggregate_district_monthly
+from younggeul_app_kr_seoul_apartment.transforms.gold_enrichment import enrich_district_monthly_trends
 from younggeul_app_kr_seoul_apartment.transforms.silver_apt import normalize_batch as normalize_apt_batch
 from younggeul_app_kr_seoul_apartment.transforms.silver_macro import (
     normalize_interest_rate_batch,
@@ -62,5 +63,6 @@ def run_pipeline(bronze: BronzeInput) -> PipelineResult:
         interest_rates=silver_rates,
         migrations=silver_migrations,
     )
+    gold = enrich_district_monthly_trends(gold)
 
     return PipelineResult(silver=silver, gold=gold)
