@@ -1,11 +1,81 @@
 name: Nightly Evaluation
-# Stub — activate in M8-05
+
 on:
   schedule:
     - cron: "0 2 * * *" # 2 AM UTC daily
   workflow_dispatch:
+    inputs:
+      include_slow:
+        description: "Include slow-marked tests"
+        required: false
+        default: "true"
+        type: boolean
+
+permissions:
+  contents: read
+
 jobs:
   eval:
+    name: Evaluation Suite
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
-      - run: echo "Stub — activate in milestone M8 (Evaluation Plane)"
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: astral-sh/setup-uv@v4
+
+      - name: Install dependencies
+        run: uv pip install --system -e ".[dev,kr-seoul-apartment]"
+
+      - name: Create output directory
+        run: mkdir -p eval_results
+
+      - name: Run eval tests
+        run: |
+          python scripts/run_eval.py --output-dir eval_results
+
+      - name: Run full test suite with slow tests
+        if: ${{ github.event_name == 'schedule' || inputs.include_slow == true }}
+        run: |
+          pytest \
+            --junitxml=eval_results/full_junit.xml \
+            -v \
+            --tb=short \
+            --cov \
+            --cov-report=xml:eval_results/coverage.xml \
+            2>&1 | tee eval_results/full_test_output.txt || true
+
+      - name: Generate summary
+        if: always()
+        run: |
+          echo "## Nightly Evaluation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Date**: $(date -u '+%Y-%m-%d %H:%M UTC')" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -f eval_results/eval_summary.json ]; then
+            STATUS=$(python3 -c "import json; d=json.load(open('eval_results/eval_summary.json')); print(d['status'])")
+            echo "**Eval Status**: $STATUS" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Eval Status**: no summary generated" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- eval_junit.xml — JUnit XML for eval tests" >> $GITHUB_STEP_SUMMARY
+          echo "- eval_summary.json — JSON summary" >> $GITHUB_STEP_SUMMARY
+          if [ -f eval_results/full_junit.xml ]; then
+            echo "- full_junit.xml — JUnit XML for full test suite" >> $GITHUB_STEP_SUMMARY
+          fi
+
+      - name: Upload eval artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results-${{ github.run_id }}
+          path: eval_results/
+          retention-days: 30
