@@ -21,7 +21,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(younggeul_simulation_runs_total{status="error"}[5m]) / rate(younggeul_simulation_runs_total[5m]) > 0.5
+              expr: (sum(rate(younggeul_simulation_runs_total{status="error"}[5m])) / sum(rate(younggeul_simulation_runs_total[5m]))) > 0.3 and sum(rate(younggeul_simulation_runs_total[5m])) > 0.01
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -29,7 +29,7 @@ groups:
         noDataState: NoData
         execErrState: Error
         annotations:
-          summary: Simulation error rate is above 50% for 5 minutes.
+          summary: Simulation error rate is above 30% for 5 minutes with minimum run volume (> 0.01 runs/sec).
         labels:
           severity: critical
 
@@ -75,7 +75,7 @@ groups:
                 type: prometheus
                 uid: prometheus
               editorMode: code
-              expr: rate(younggeul_citation_gate_failures_total[5m]) > 0.1
+              expr: sum(rate(younggeul_citation_gate_failures_total[5m])) > 0.1 and sum(increase(younggeul_citation_gate_failures_total[5m])) > 3
               instant: true
               intervalMs: 1000
               maxDataPoints: 43200
@@ -83,6 +83,33 @@ groups:
         noDataState: NoData
         execErrState: Error
         annotations:
-          summary: Citation gate failures exceed 0.1 events/second for 5 minutes.
+          summary: Citation gate failures exceed 0.1 events/second for 5 minutes with minimum absolute failures (> 3 in 5m).
+        labels:
+          severity: warning
+
+      - uid: stuck-running-simulation
+        title: StuckRunningSimulation
+        condition: A
+        for: 10m
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            relativeTimeRange:
+              from: 600
+              to: 0
+            model:
+              datasource:
+                type: prometheus
+                uid: prometheus
+              editorMode: code
+              expr: younggeul_simulation_active_runs > 0
+              instant: true
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: A
+        noDataState: NoData
+        execErrState: Error
+        annotations:
+          summary: A simulation has been in running state for more than 10 minutes.
         labels:
           severity: warning
