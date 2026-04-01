@@ -4,7 +4,9 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-from younggeul_app_kr_seoul_apartment.web.run_store import RunMeta, RunStore
+import pytest
+
+from younggeul_app_kr_seoul_apartment.web.run_store import RunCapacityExceededError, RunMeta, RunStore
 
 
 def test_create_run_creates_directory_and_meta_json(tmp_path: Path) -> None:
@@ -110,6 +112,25 @@ def test_update_status_with_report_writes_report_md(tmp_path: Path) -> None:
     assert run_meta is not None
     assert run_meta.status == "completed"
     assert run_meta.completed_at is not None
+
+
+def test_create_run_rejects_when_inflight_capacity_is_reached(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    _ = store.create_run("first")
+
+    with pytest.raises(RunCapacityExceededError, match="Simulation queue is full; try again later"):
+        store.create_run("second", max_inflight_runs=1)
+
+
+def test_create_run_allows_new_run_when_only_completed_runs_exist(tmp_path: Path) -> None:
+    store = RunStore(base_dir=tmp_path)
+    first_run_id = store.create_run("first")
+    store.update_status(first_run_id, "running")
+    store.update_status(first_run_id, "completed")
+
+    second_run_id = store.create_run("second", max_inflight_runs=1)
+
+    assert second_run_id != first_run_id
 
 
 def test_reconcile_stale_runs_marks_running_runs_failed(tmp_path: Path) -> None:

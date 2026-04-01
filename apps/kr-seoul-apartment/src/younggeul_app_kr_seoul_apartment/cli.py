@@ -6,7 +6,6 @@ import json
 import subprocess
 import sys
 from datetime import datetime, timezone
-from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -20,6 +19,7 @@ from younggeul_core.state.simulation import SnapshotRef
 
 from .forecaster import forecast_baseline, generate_baseline_report
 from .pipeline import BronzeInput, run_pipeline
+from .runtime_version import get_runtime_version
 from .simulation.event_store import InMemoryEventStore
 from .simulation.evidence.store import InMemoryEvidenceStore
 from .simulation.graph import build_simulation_graph
@@ -28,6 +28,7 @@ from .simulation.metrics import init_metrics, shutdown_metrics
 from .simulation.schemas.report import RenderedReport
 from .simulation.tracing import init_tracing, shutdown_tracing
 from .snapshot import publish_snapshot, resolve_snapshot
+from .web.config import validate_max_rounds, validate_model_id
 
 
 def _output(ctx: click.Context, data: dict[str, Any], text_lines: list[str]) -> None:
@@ -53,11 +54,7 @@ def _shutdown_observability() -> None:
 def _emit_version(ctx: click.Context, _: click.Option, value: bool) -> None:
     if not value or ctx.resilient_parsing:
         return
-    try:
-        package_version = version("younggeul")
-    except PackageNotFoundError:
-        package_version = "dev"
-    click.echo(package_version)
+    click.echo(get_runtime_version())
     ctx.exit()
 
 
@@ -417,6 +414,7 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
 @main.command("simulate")
 @click.option("--query", required=True, type=str)
 @click.option("--max-rounds", type=int, default=3, show_default=True)
+@click.option("--model-id", type=str, default="stub", show_default=True)
 @click.option("--run-name", type=str, default="cli-run", show_default=True)
 @click.option(
     "--output-dir",
@@ -425,15 +423,24 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
     show_default=True,
 )
 @click.pass_context
-def simulate_command(ctx: click.Context, query: str, max_rounds: int, run_name: str, output_dir: Path) -> None:
+def simulate_command(
+    ctx: click.Context,
+    query: str,
+    max_rounds: int,
+    model_id: str,
+    run_name: str,
+    output_dir: Path,
+) -> None:
     """Run the simulation graph and save a rendered Markdown report."""
     try:
+        validate_max_rounds(max_rounds)
+        validate_model_id(model_id)
         event_store = InMemoryEventStore()
         evidence_store = InMemoryEvidenceStore()
         graph = build_simulation_graph(event_store, evidence_store=evidence_store)
 
         run_id = str(uuid4())
-        initial_state = seed_graph_state(query, run_id=run_id, run_name=run_name, model_id="stub")
+        initial_state = seed_graph_state(query, run_id=run_id, run_name=run_name, model_id=model_id)
         initial_state["max_rounds"] = max_rounds
         final_state = graph.invoke(initial_state)
 
@@ -452,6 +459,8 @@ def simulate_command(ctx: click.Context, query: str, max_rounds: int, run_name: 
         }
         text_lines = [rendered_report.markdown, "", f"Saved report: {report_file}"]
         _output(ctx, data, text_lines)
+    except ValueError as exc:
+        raise click.ClickException(str(exc)) from exc
     except click.ClickException:
         raise
     except Exception as exc:

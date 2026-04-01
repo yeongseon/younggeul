@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from typing import Any, Protocol, cast
 
+from ..runtime_version import get_runtime_version
+
 otel_metrics: Any | None
 
 try:
@@ -115,7 +117,7 @@ def init_metrics() -> None:
         exporter = ConsoleMetricExporter()
 
     reader = PeriodicExportingMetricReader(exporter)
-    resource = Resource(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    resource = Resource(attributes={"service.name": "younggeul", "service.version": get_runtime_version()})
     provider = MeterProvider(metric_readers=[reader], resource=resource)
     otel_metrics.set_meter_provider(provider)
     _provider = provider

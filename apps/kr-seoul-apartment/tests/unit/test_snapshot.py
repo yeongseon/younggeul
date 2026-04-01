@@ -141,6 +141,40 @@ class TestPublishSnapshot:
 
         assert first.dataset_snapshot_id == second.dataset_snapshot_id
 
+    def test_republish_same_rows_preserves_existing_snapshot_metadata(self, tmp_path: Path) -> None:
+        rows = [_make_gold(period="2025-07")]
+
+        first = publish_snapshot(rows, tmp_path)
+        first_manifest_path = _manifest_path(tmp_path, first.dataset_snapshot_id)
+        first_created_at = json.loads(first_manifest_path.read_text(encoding="utf-8"))["created_at"]
+
+        second = publish_snapshot(rows, tmp_path)
+        second_created_at = json.loads(first_manifest_path.read_text(encoding="utf-8"))["created_at"]
+
+        assert second.dataset_snapshot_id == first.dataset_snapshot_id
+        assert second.created_at == first.created_at
+        assert second_created_at == first_created_at
+
+    def test_republish_same_rows_handles_concurrent_directory_creation(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        rows = [_make_gold(period="2025-07")]
+        first = publish_snapshot(rows, tmp_path)
+        snapshot_dir = _snapshot_dir(tmp_path, first.dataset_snapshot_id)
+        original_mkdir = Path.mkdir
+
+        def fake_mkdir(self: Path, parents: bool = False, exist_ok: bool = False) -> None:
+            if self == snapshot_dir:
+                raise FileExistsError
+            original_mkdir(self, parents=parents, exist_ok=exist_ok)
+
+        monkeypatch.setattr(Path, "mkdir", fake_mkdir)
+
+        second = publish_snapshot(rows, tmp_path)
+
+        assert second.dataset_snapshot_id == first.dataset_snapshot_id
+        assert second.created_at == first.created_at
+
     def test_empty_rows_creates_empty_jsonl_and_zero_record_count(self, tmp_path: Path) -> None:
         ref = publish_snapshot([], tmp_path)
 

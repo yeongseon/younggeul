@@ -1,16 +1,25 @@
 from __future__ import annotations
 
+import asyncio
 from importlib import import_module
 
-from fastapi.testclient import TestClient
-
 web_app = import_module("younggeul_app_kr_seoul_apartment.web.app")
+health_routes = import_module("younggeul_app_kr_seoul_apartment.web.routes.health")
 
 
 def test_health_endpoint_returns_expected_payload() -> None:
-    app = web_app.create_app()
-    with TestClient(app) as client:
-        response = client.get("/health")
+    payload = asyncio.run(health_routes.health())
 
-        assert response.status_code == 200
-        assert response.json() == {"status": "ok", "version": "0.2.0"}
+    assert payload["status"] == "ok"
+    assert payload["version"] == web_app.get_runtime_version()
+
+
+def test_placeholder_api_routes_are_not_exposed() -> None:
+    app = web_app.create_app()
+    paths = {route.path for route in app.routes}
+
+    assert "/health" in paths
+    assert "/simulate" in paths
+    assert "/ui/" in paths
+    assert "/snapshot" not in paths
+    assert "/baseline" not in paths

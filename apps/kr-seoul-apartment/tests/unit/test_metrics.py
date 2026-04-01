@@ -73,7 +73,9 @@ def test_init_metrics_and_get_meter_work() -> None:
 
     exporter_cls.assert_called_once()
     metric_reader_cls.assert_called_once_with(exporter)
-    resource_cls.assert_called_once_with(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    resource_cls.assert_called_once_with(
+        attributes={"service.name": "younggeul", "service.version": metrics_module.get_runtime_version()}
+    )
     meter_provider_cls.assert_called_once_with(metric_readers=[reader], resource=resource)
     set_meter_provider.assert_called_once_with(provider)
     assert getattr(metrics_module, "_initialized") is True

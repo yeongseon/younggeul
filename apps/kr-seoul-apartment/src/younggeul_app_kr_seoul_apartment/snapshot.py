@@ -6,6 +6,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from uuid import uuid4
 
 from pydantic import ValidationError
 
@@ -48,6 +49,43 @@ def _load_manifest(manifest_path: Path) -> SnapshotManifest:
     return manifest
 
 
+def _resolve_existing_snapshot(
+    *,
+    manifest_path: Path,
+    table_path: Path,
+    jsonl_content: bytes,
+    dataset_snapshot_id: str,
+) -> SnapshotRef:
+    manifest = _load_manifest(manifest_path)
+    table_entry = manifest.get_table(_TABLE_NAME)
+    if table_entry is None:
+        raise ValueError(f"Manifest missing table entry: {_TABLE_NAME}")
+
+    existing_table_bytes = table_path.read_bytes()
+    if existing_table_bytes != jsonl_content:
+        raise ValueError(f"Snapshot already exists with different content: {dataset_snapshot_id}")
+
+    existing_table_hash = hashlib.sha256(existing_table_bytes).hexdigest()
+    if existing_table_hash != table_entry.table_hash:
+        raise ValueError(f"Existing snapshot content failed integrity check: {dataset_snapshot_id}")
+
+    return SnapshotRef(
+        dataset_snapshot_id=manifest.dataset_snapshot_id,
+        created_at=manifest.created_at,
+        table_count=len(manifest.table_entries),
+    )
+
+
+def _atomic_write_bytes(path: Path, payload: bytes) -> None:
+    temp_path = path.with_name(f"{path.name}.{uuid4().hex}.tmp")
+    temp_path.write_bytes(payload)
+    temp_path.replace(path)
+
+
+def _atomic_write_text(path: Path, payload: str) -> None:
+    _atomic_write_bytes(path, payload.encode("utf-8"))
+
+
 def publish_snapshot(gold_rows: list[GoldDistrictMonthlyMetrics], base_dir: Path) -> SnapshotRef:
     """Publish Gold metrics as an immutable dataset snapshot.
 
@@ -64,10 +102,27 @@ def publish_snapshot(gold_rows: list[GoldDistrictMonthlyMetrics], base_dir: Path
     dataset_snapshot_id = SnapshotManifest.compute_snapshot_id({_TABLE_NAME: table_hash})
 
     snapshot_dir = base_dir / dataset_snapshot_id
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-
+    manifest_path = snapshot_dir / _MANIFEST_FILE_NAME
     table_path = snapshot_dir / _TABLE_FILE_NAME
-    table_path.write_bytes(jsonl_content)
+    if snapshot_dir.exists():
+        return _resolve_existing_snapshot(
+            manifest_path=manifest_path,
+            table_path=table_path,
+            jsonl_content=jsonl_content,
+            dataset_snapshot_id=dataset_snapshot_id,
+        )
+
+    try:
+        snapshot_dir.mkdir(parents=True, exist_ok=False)
+    except FileExistsError:
+        return _resolve_existing_snapshot(
+            manifest_path=manifest_path,
+            table_path=table_path,
+            jsonl_content=jsonl_content,
+            dataset_snapshot_id=dataset_snapshot_id,
+        )
+
+    _atomic_write_bytes(table_path, jsonl_content)
 
     created_at = datetime.now(timezone.utc)
     manifest = SnapshotManifest(
@@ -84,8 +139,7 @@ def publish_snapshot(gold_rows: list[GoldDistrictMonthlyMetrics], base_dir: Path
         ],
     )
 
-    manifest_path = snapshot_dir / _MANIFEST_FILE_NAME
-    manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
+    _atomic_write_text(manifest_path, manifest.model_dump_json())
 
     return SnapshotRef(
         dataset_snapshot_id=dataset_snapshot_id,
