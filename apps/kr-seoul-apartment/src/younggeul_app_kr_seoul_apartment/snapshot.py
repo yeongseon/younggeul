@@ -64,9 +64,30 @@ def publish_snapshot(gold_rows: list[GoldDistrictMonthlyMetrics], base_dir: Path
     dataset_snapshot_id = SnapshotManifest.compute_snapshot_id({_TABLE_NAME: table_hash})
 
     snapshot_dir = base_dir / dataset_snapshot_id
-    snapshot_dir.mkdir(parents=True, exist_ok=True)
-
+    manifest_path = snapshot_dir / _MANIFEST_FILE_NAME
     table_path = snapshot_dir / _TABLE_FILE_NAME
+    if snapshot_dir.exists():
+        manifest = _load_manifest(manifest_path)
+        table_entry = manifest.get_table(_TABLE_NAME)
+        if table_entry is None:
+            raise ValueError(f"Manifest missing table entry: {_TABLE_NAME}")
+
+        existing_table_bytes = table_path.read_bytes()
+        if existing_table_bytes != jsonl_content:
+            raise ValueError(f"Snapshot already exists with different content: {dataset_snapshot_id}")
+
+        existing_table_hash = hashlib.sha256(existing_table_bytes).hexdigest()
+        if existing_table_hash != table_entry.table_hash:
+            raise ValueError(f"Existing snapshot content failed integrity check: {dataset_snapshot_id}")
+
+        return SnapshotRef(
+            dataset_snapshot_id=manifest.dataset_snapshot_id,
+            created_at=manifest.created_at,
+            table_count=len(manifest.table_entries),
+        )
+
+    snapshot_dir.mkdir(parents=True, exist_ok=False)
+
     table_path.write_bytes(jsonl_content)
 
     created_at = datetime.now(timezone.utc)
@@ -84,7 +105,6 @@ def publish_snapshot(gold_rows: list[GoldDistrictMonthlyMetrics], base_dir: Path
         ],
     )
 
-    manifest_path = snapshot_dir / _MANIFEST_FILE_NAME
     manifest_path.write_text(manifest.model_dump_json(), encoding="utf-8")
 
     return SnapshotRef(

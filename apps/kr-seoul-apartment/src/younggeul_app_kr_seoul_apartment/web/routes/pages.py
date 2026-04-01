@@ -12,6 +12,7 @@ from fastapi.templating import Jinja2Templates
 from ..config import validate_max_rounds, validate_model_id
 from ..run_store import RunMeta, RunStore
 from ..services import forecast_baseline_service, resolve_snapshot_service, run_simulation_background
+from ..submission_control import has_submission_capacity
 
 router = APIRouter(prefix="/ui", tags=["pages"])
 
@@ -129,6 +130,12 @@ async def simulate_start(request: Request) -> HTMLResponse:
 
     run_store = cast(RunStoreLike, _state(request).run_store)
     executor = _state(request).executor
+
+    if not has_submission_capacity(run_store):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Simulation queue is full; try again later",
+        )
 
     run_id = run_store.create_run(query)
     try:

@@ -9,15 +9,14 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.templating import Jinja2Templates
 
+from ..runtime_version import get_runtime_version
 from ..simulation.metrics import init_metrics, shutdown_metrics
 from ..simulation.tracing import init_tracing, shutdown_tracing
 from .middleware import MetricsMiddleware
 from .run_store import RunStore
-from .routes.baseline import router as baseline_router
 from .routes.health import router as health_router
 from .routes.pages import router as pages_router
 from .routes.simulate import router as simulate_router
-from .routes.snapshot import router as snapshot_router
 
 
 logger = logging.getLogger(__name__)
@@ -50,11 +49,9 @@ async def app_lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="영끌 시뮬레이터", version="0.2.0", lifespan=app_lifespan)
+    app = FastAPI(title="영끌 시뮬레이터", version=get_runtime_version(), lifespan=app_lifespan)
     app.add_middleware(MetricsMiddleware)
     app.include_router(health_router)
     app.include_router(simulate_router)
-    app.include_router(snapshot_router)
-    app.include_router(baseline_router)
     app.include_router(pages_router)
     return app

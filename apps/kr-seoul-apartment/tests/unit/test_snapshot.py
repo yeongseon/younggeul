@@ -141,6 +141,20 @@ class TestPublishSnapshot:
 
         assert first.dataset_snapshot_id == second.dataset_snapshot_id
 
+    def test_republish_same_rows_preserves_existing_snapshot_metadata(self, tmp_path: Path) -> None:
+        rows = [_make_gold(period="2025-07")]
+
+        first = publish_snapshot(rows, tmp_path)
+        first_manifest_path = _manifest_path(tmp_path, first.dataset_snapshot_id)
+        first_created_at = json.loads(first_manifest_path.read_text(encoding="utf-8"))["created_at"]
+
+        second = publish_snapshot(rows, tmp_path)
+        second_created_at = json.loads(first_manifest_path.read_text(encoding="utf-8"))["created_at"]
+
+        assert second.dataset_snapshot_id == first.dataset_snapshot_id
+        assert second.created_at == first.created_at
+        assert second_created_at == first_created_at
+
     def test_empty_rows_creates_empty_jsonl_and_zero_record_count(self, tmp_path: Path) -> None:
         ref = publish_snapshot([], tmp_path)
 

@@ -10,6 +10,8 @@ from typing import Any, Iterator
 from opentelemetry import trace
 from opentelemetry.trace import Span, Status, StatusCode, Tracer
 
+from ..runtime_version import get_runtime_version
+
 _TRACER_NAME = "younggeul.simulation"
 _initialized = False
 _provider: Any = None
@@ -31,7 +33,7 @@ def init_tracing() -> None:
     from opentelemetry.sdk.trace import TracerProvider
     from opentelemetry.sdk.trace.export import BatchSpanProcessor, ConsoleSpanExporter, SpanExporter
 
-    resource = Resource(attributes={"service.name": "younggeul", "service.version": "0.2.1"})
+    resource = Resource(attributes={"service.name": "younggeul", "service.version": get_runtime_version()})
     provider = TracerProvider(resource=resource)
     exporter: SpanExporter
 

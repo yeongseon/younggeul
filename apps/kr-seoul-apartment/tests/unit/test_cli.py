@@ -18,7 +18,7 @@ def runner() -> CliRunner:
 
 
 def test_version_outputs_package_version(runner: CliRunner, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(cli, "version", lambda _: "1.2.3")
+    monkeypatch.setattr(cli, "get_runtime_version", lambda: "1.2.3")
 
     result = runner.invoke(cli.main, ["--version"])
 
@@ -115,6 +115,75 @@ def test_simulate_json_output_is_valid_json(runner: CliRunner, tmp_path: Path) -
     payload = json.loads(result.output)
     assert payload["run_id"]
     assert payload["rendered_report"]["markdown"].startswith("# Simulation Report")
+
+
+def test_simulate_passes_model_id_to_graph_seed(
+    runner: CliRunner,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, str] = {}
+    original_seed_graph_state = cli.seed_graph_state
+
+    class FakeGraph:
+        def invoke(self, initial_state: dict[str, Any]) -> dict[str, Any]:
+            return {
+                **initial_state,
+                "round_no": 1,
+                "event_refs": [],
+                "warnings": [],
+            }
+
+    class FakeRenderedReport:
+        markdown = "# Simulation Report\n\nstub"
+
+        def model_dump(self, mode: str = "python") -> dict[str, Any]:
+            _ = mode
+            return {"markdown": self.markdown}
+
+    def fake_seed_graph_state(query: str, *, run_id: str, run_name: str, model_id: str) -> dict[str, Any]:
+        captured["model_id"] = model_id
+        return original_seed_graph_state(query, run_id=run_id, run_name=run_name, model_id=model_id)
+
+    monkeypatch.setattr(cli, "seed_graph_state", fake_seed_graph_state)
+    monkeypatch.setattr(cli, "build_simulation_graph", lambda *args, **kwargs: FakeGraph())
+    monkeypatch.setattr(cli, "_extract_rendered_report", lambda *args, **kwargs: FakeRenderedReport())
+
+    result = runner.invoke(
+        cli.main,
+        [
+            "simulate",
+            "--query",
+            "test",
+            "--max-rounds",
+            "1",
+            "--model-id",
+            "gpt-4o-mini",
+            "--output-dir",
+            str(tmp_path / "simulation"),
+        ],
+    )
+
+    assert result.exit_code == 0
+    assert captured["model_id"] == "gpt-4o-mini"
+
+
+def test_simulate_rejects_invalid_model_id(runner: CliRunner, tmp_path: Path) -> None:
+    result = runner.invoke(
+        cli.main,
+        [
+            "simulate",
+            "--query",
+            "test",
+            "--model-id",
+            "not-allowed",
+            "--output-dir",
+            str(tmp_path / "simulation"),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "model_id 'not-allowed' is not allowed" in result.output
 
 
 def test_eval_invokes_subprocess_and_returns_success(

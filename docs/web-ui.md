@@ -19,6 +19,7 @@ The web app is created in `web/app.py` via `create_app()` and uses a FastAPI lif
 - `Jinja2Templates` for rendering pages and HTMX partials
 
 Background simulations are submitted from UI/API handlers and executed through `run_simulation_background(...)`, while run status and report content are persisted under `./output/runs/<run_id>/`.
+The app also enforces an in-flight submission cap via `YOUNGGEUL_WEB_MAX_INFLIGHT_RUNS` to avoid unbounded background queue growth.
 
 ## Pages
 
@@ -37,9 +38,6 @@ Background simulations are submitted from UI/API handlers and executed through `
 | `POST` | `/simulate` | Create simulation run (async) | Implemented |
 | `GET` | `/simulate` | List simulation runs | Implemented |
 | `GET` | `/simulate/{run_id}` | Get single run metadata | Implemented |
-| `POST` | `/baseline` | Baseline API route placeholder | `501 Not Implemented` |
-| `GET` | `/snapshot` | Snapshot list API placeholder | `501 Not Implemented` |
-| `POST` | `/snapshot/publish` | Snapshot publish API placeholder | `501 Not Implemented` |
 
 ### HTML UI routes
 
@@ -86,6 +84,8 @@ docker compose --profile web-obs --profile obs up -d
 | `OTEL_ENABLED` | `false` (`web` profile) / `true` (`web-obs`) | Toggle OpenTelemetry metrics/tracing bootstrap |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | _(unset)_ | OTLP gRPC collector endpoint (e.g. `http://otel-collector:4317`) |
 | `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Use insecure OTLP gRPC transport when `true` |
+| `YOUNGGEUL_ALLOWED_MODELS` | `stub,gpt-4o-mini` | Comma-separated allowlist for simulation model IDs |
+| `YOUNGGEUL_WEB_MAX_INFLIGHT_RUNS` | `4` | Max number of `pending` + `running` web simulations accepted at once |
 
 ## Development notes
 

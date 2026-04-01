@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from ..config import get_allowed_models, validate_max_rounds, validate_model_id
 from ..run_store import RunMeta
 from ..services import run_simulation_background
+from ..submission_control import has_submission_capacity
 
 router = APIRouter(prefix="/simulate", tags=["simulate"])
 
@@ -31,6 +32,12 @@ class SimulateRequest(BaseModel):
 async def create_simulation_run(request: Request, payload: SimulateRequest) -> dict[str, str]:
     run_store = request.app.state.run_store
     executor = request.app.state.executor
+
+    if not has_submission_capacity(run_store):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Simulation queue is full; try again later",
+        )
 
     run_id = run_store.create_run(payload.query)
     try:
