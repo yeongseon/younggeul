@@ -30,7 +30,7 @@ dev = [
   "mypy",
   "pre-commit",
   "pandas-stubs",
-  "fastapi>=0.100",
+  "fastapi>=0.135.3",
   "uvicorn[standard]>=0.20",
   "jinja2>=3.1",
   "opentelemetry-api>=1.20",
@@ -38,7 +38,7 @@ dev = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 web = [
-  "fastapi>=0.100",
+  "fastapi>=0.135.3",
   "uvicorn[standard]>=0.20",
   "jinja2>=3.1",
 ]
