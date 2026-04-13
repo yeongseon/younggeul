@@ -52,7 +52,7 @@ kr-seoul-apartment = [
   "pandas>=2.0",
 ]
 docs = [
-  "mkdocs-material>=9.0",
+  "mkdocs-material>=9.7.6",
   "mkdocs>=1.5",
   "mkdocstrings[python]>=0.25",
 ]
