@@ -48,7 +48,7 @@ observability = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
-  "PublicDataReader>=1.1",
+  "PublicDataReader>=1.1.1.post2",
   "pandas>=2.0",
 ]
 docs = [
