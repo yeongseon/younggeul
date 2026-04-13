@@ -10,7 +10,7 @@ readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
   "click>=8.0",
-  "pydantic>=2.0",
+  "pydantic>=2.13.0",
   "langgraph>=0.6,<0.7",
   "litellm",
   "opentelemetry-api",
