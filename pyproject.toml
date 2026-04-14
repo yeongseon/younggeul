@@ -48,7 +48,7 @@ observability = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
-  "PublicDataReader>=1.1",
+  "kpubdata>=0.1.0a0",
   "pandas>=2.0",
 ]
 docs = [
@@ -82,7 +82,7 @@ module = ["core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["PublicDataReader", "PublicDataReader.*"]
+module = ["kpubdata", "kpubdata.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

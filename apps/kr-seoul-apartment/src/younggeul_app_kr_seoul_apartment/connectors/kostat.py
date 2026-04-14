@@ -1,4 +1,4 @@
-"""KOSTAT population migration connector using PublicDataReader KOSIS API."""
+"""KOSTAT population migration connector using kpubdata KOSIS API."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 import pandas as pd
-from PublicDataReader import Kosis
+from kpubdata.core.dataset import Dataset
 
 from younggeul_core.connectors.hashing import sha256_payload
 from younggeul_core.connectors.manifest import build_manifest
@@ -174,7 +174,7 @@ def _map_to_bronze(
 
 
 class KostatMigrationConnector:
-    """Connector for KOSTAT population migration data via PublicDataReader KOSIS API.
+    """Connector for KOSTAT population migration data via kpubdata KOSIS API.
 
     Satisfies ``Connector[KostatMigrationRequest, BronzeMigration]`` protocol.
     """
@@ -183,7 +183,7 @@ class KostatMigrationConnector:
 
     def __init__(
         self,
-        client: Kosis,
+        client: Dataset,
         rate_limiter: RateLimiter,
         now_fn: Callable[[], datetime] = _utc_now,
     ) -> None:
@@ -204,19 +204,15 @@ class KostatMigrationConnector:
 
         def _call_api() -> pd.DataFrame:
             self._rate_limiter.wait()
-            result: pd.DataFrame = self._client.get_data(
-                "통계자료",
-                orgId=request.org_id,
-                tblId=request.tbl_id,
+            batch = self._client.list(
+                start_date=request.year_month,
+                end_date=request.year_month,
                 objL1="ALL",
                 objL2="ALL",
                 itmId="T20+T25+T30",
                 prdSe="M",
-                startPrdDe=request.year_month,
-                endPrdDe=request.year_month,
-                translate=False,
             )
-            return result
+            return pd.DataFrame(batch.items)
 
         request_params = {
             "org_id": request.org_id,
