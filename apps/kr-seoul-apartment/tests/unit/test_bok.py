@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
 from unittest.mock import MagicMock
 
+from kpubdata.core.dataset import Dataset
+from kpubdata.core.models import DatasetRef, RecordBatch
+from kpubdata.core.representation import Representation
 import numpy as np
 import pandas as pd
 import pytest
@@ -57,46 +59,75 @@ def _monthly_rate_request() -> BokInterestRateRequest:
     )
 
 
-def _sample_daily_dataframe() -> pd.DataFrame:
-    """Create a synthetic DataFrame matching ECOS StatisticSearch output (daily)."""
-    data: dict[str, list[Any]] = {
-        "STAT_CODE": ["722Y001"],
-        "STAT_NAME": ["한국은행 기준금리"],
-        "ITEM_CODE1": ["0101000"],
-        "ITEM_NAME1": ["한국은행 기준금리"],
-        "ITEM_CODE2": [" "],
-        "ITEM_NAME2": [" "],
-        "ITEM_CODE3": [" "],
-        "ITEM_NAME3": [" "],
-        "ITEM_CODE4": [" "],
-        "ITEM_NAME4": [" "],
-        "UNIT_NAME": ["%"],
-        "WGT": [np.nan],
-        "TIME": ["20240115"],
-        "DATA_VALUE": ["3.50"],
-    }
-    return pd.DataFrame(data)
+def _record_batch(items: list[dict[str, object]]) -> RecordBatch:
+    dataset = DatasetRef(
+        id="bok.base_rate",
+        provider="bok",
+        dataset_key="base_rate",
+        name="한국은행 기준금리",
+        representation=Representation.API_JSON,
+    )
+    return RecordBatch(items=items, dataset=dataset, total_count=len(items), raw=None)
 
 
-def _sample_monthly_dataframe() -> pd.DataFrame:
-    """Create a synthetic DataFrame matching ECOS StatisticSearch output (monthly)."""
-    data: dict[str, list[Any]] = {
-        "STAT_CODE": ["121Y006", "121Y006"],
-        "STAT_NAME": ["예금은행 대출금리", "예금은행 대출금리"],
-        "ITEM_CODE1": ["BIS0020", "BIS0020"],
-        "ITEM_NAME1": ["주택담보대출금리", "주택담보대출금리"],
-        "ITEM_CODE2": [" ", " "],
-        "ITEM_NAME2": [" ", " "],
-        "ITEM_CODE3": [" ", " "],
-        "ITEM_NAME3": [" ", " "],
-        "ITEM_CODE4": [" ", " "],
-        "ITEM_NAME4": [" ", " "],
-        "UNIT_NAME": ["연%", "연%"],
-        "WGT": [np.nan, np.nan],
-        "TIME": ["202401", "202402"],
-        "DATA_VALUE": ["4.28", "4.25"],
-    }
-    return pd.DataFrame(data)
+def _sample_daily_dataframe() -> RecordBatch:
+    items: list[dict[str, object]] = [
+        {
+            "STAT_CODE": "722Y001",
+            "STAT_NAME": "한국은행 기준금리",
+            "ITEM_CODE1": "0101000",
+            "ITEM_NAME1": "한국은행 기준금리",
+            "ITEM_CODE2": " ",
+            "ITEM_NAME2": " ",
+            "ITEM_CODE3": " ",
+            "ITEM_NAME3": " ",
+            "ITEM_CODE4": " ",
+            "ITEM_NAME4": " ",
+            "UNIT_NAME": "%",
+            "WGT": np.nan,
+            "TIME": "20240115",
+            "DATA_VALUE": "3.50",
+        }
+    ]
+    return _record_batch(items)
+
+
+def _sample_monthly_dataframe() -> RecordBatch:
+    items: list[dict[str, object]] = [
+        {
+            "STAT_CODE": "121Y006",
+            "STAT_NAME": "예금은행 대출금리",
+            "ITEM_CODE1": "BIS0020",
+            "ITEM_NAME1": "주택담보대출금리",
+            "ITEM_CODE2": " ",
+            "ITEM_NAME2": " ",
+            "ITEM_CODE3": " ",
+            "ITEM_NAME3": " ",
+            "ITEM_CODE4": " ",
+            "ITEM_NAME4": " ",
+            "UNIT_NAME": "연%",
+            "WGT": np.nan,
+            "TIME": "202401",
+            "DATA_VALUE": "4.28",
+        },
+        {
+            "STAT_CODE": "121Y006",
+            "STAT_NAME": "예금은행 대출금리",
+            "ITEM_CODE1": "BIS0020",
+            "ITEM_NAME1": "주택담보대출금리",
+            "ITEM_CODE2": " ",
+            "ITEM_NAME2": " ",
+            "ITEM_CODE3": " ",
+            "ITEM_NAME3": " ",
+            "ITEM_CODE4": " ",
+            "ITEM_NAME4": " ",
+            "UNIT_NAME": "연%",
+            "WGT": np.nan,
+            "TIME": "202402",
+            "DATA_VALUE": "4.25",
+        },
+    ]
+    return _record_batch(items)
 
 
 # ---------------------------------------------------------------------------
@@ -190,7 +221,7 @@ class TestNormalizeDataframe:
 
 class TestBokInterestRateConnector:
     def _make_connector(self, client: MagicMock | None = None) -> tuple[BokInterestRateConnector, MagicMock]:
-        mock_client = client or MagicMock()
+        mock_client = client or MagicMock(spec=Dataset)
         connector = BokInterestRateConnector(
             client=mock_client,
             rate_limiter=_make_rate_limiter(),
@@ -203,9 +234,8 @@ class TestBokInterestRateConnector:
         assert isinstance(connector, Connector)
 
     def test_full_row_mapping_daily(self) -> None:
-        """Map a daily rate DataFrame row to BronzeInterestRate."""
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client.list.return_value = _sample_daily_dataframe()
 
         request = _base_rate_request()
         result = connector.fetch(request)
@@ -225,9 +255,8 @@ class TestBokInterestRateConnector:
         assert len(rec.raw_response_hash) == 64  # noqa: PLR2004
 
     def test_full_row_mapping_monthly(self) -> None:
-        """Map monthly rate DataFrame rows to BronzeInterestRate."""
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = _sample_monthly_dataframe()
+        mock_client.list.return_value = _sample_monthly_dataframe()
 
         request = _monthly_rate_request()
         result = connector.fetch(request)
@@ -241,7 +270,7 @@ class TestBokInterestRateConnector:
 
     def test_empty_dataframe_returns_empty_result(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = pd.DataFrame()
+        mock_client.list.return_value = _record_batch([])
 
         request = _base_rate_request()
         result = connector.fetch(request)
@@ -252,7 +281,7 @@ class TestBokInterestRateConnector:
 
     def test_api_failure_returns_failed_manifest(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.side_effect = ConnectorError("ECOS timeout")
+        mock_client.list.side_effect = ConnectorError("ECOS timeout")
 
         request = _base_rate_request()
         result = connector.fetch(request)
@@ -263,7 +292,7 @@ class TestBokInterestRateConnector:
 
     def test_missing_columns_raises_non_retryable(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = pd.DataFrame({"TIME": ["20240101"], "DATA_VALUE": ["3.50"]})
+        mock_client.list.return_value = _record_batch([{"TIME": "20240101", "DATA_VALUE": "3.50"}])
 
         request = _base_rate_request()
         with pytest.raises(NonRetryableError, match="Missing expected columns"):
@@ -271,7 +300,7 @@ class TestBokInterestRateConnector:
 
     def test_manifest_fields_correct(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client.list.return_value = _sample_daily_dataframe()
 
         request = _base_rate_request()
         result = connector.fetch(request)
@@ -292,8 +321,8 @@ class TestBokInterestRateConnector:
 
     def test_rate_limiter_called(self) -> None:
         mock_limiter = MagicMock(spec=RateLimiter)
-        mock_client = MagicMock()
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client = MagicMock(spec=Dataset)
+        mock_client.list.return_value = _sample_daily_dataframe()
 
         connector = BokInterestRateConnector(
             client=mock_client,
@@ -307,12 +336,12 @@ class TestBokInterestRateConnector:
 
     def test_hash_deterministic_for_same_data(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client.list.return_value = _sample_daily_dataframe()
 
         request = _base_rate_request()
         r1 = connector.fetch(request)
 
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client.list.return_value = _sample_daily_dataframe()
         r2 = connector.fetch(request)
 
         assert r1.records[0].raw_response_hash == r2.records[0].raw_response_hash
@@ -321,10 +350,10 @@ class TestBokInterestRateConnector:
         """Hashes differ for different series data (identity columns included)."""
         connector, mock_client = self._make_connector()
 
-        mock_client.get_statistic_search.return_value = _sample_daily_dataframe()
+        mock_client.list.return_value = _sample_daily_dataframe()
         r1 = connector.fetch(_base_rate_request())
 
-        mock_client.get_statistic_search.return_value = _sample_monthly_dataframe()
+        mock_client.list.return_value = _sample_monthly_dataframe()
         r2 = connector.fetch(_monthly_rate_request())
 
         assert r1.records[0].raw_response_hash != r2.records[0].raw_response_hash
@@ -339,7 +368,7 @@ class TestBokInterestRateRequest:
     def test_frozen(self) -> None:
         req = _base_rate_request()
         with pytest.raises(AttributeError):
-            req.stat_code = "999Y999"  # type: ignore[misc]
+            setattr(req, "stat_code", "999Y999")
 
     def test_fields(self) -> None:
         req = _base_rate_request()

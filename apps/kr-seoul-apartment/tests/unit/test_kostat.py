@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Any
+from typing import cast
 from unittest.mock import MagicMock
 
+from kpubdata.core.dataset import Dataset
+from kpubdata.core.models import DatasetRef, RecordBatch
+from kpubdata.core.representation import Representation
 import numpy as np
 import pandas as pd
 import pytest
@@ -40,13 +43,36 @@ def _default_request() -> KostatMigrationRequest:
     return KostatMigrationRequest(year_month="202301")
 
 
+def _dataset_ref() -> DatasetRef:
+    return DatasetRef(
+        id="kosis.population_migration",
+        provider="kosis",
+        dataset_key="population_migration",
+        name="시도별 이동자수",
+        representation=Representation.API_JSON,
+    )
+
+
+def _record_batch(items: list[dict[str, object]]) -> RecordBatch:
+    return RecordBatch(
+        items=items,
+        dataset=_dataset_ref(),
+        total_count=len(items),
+        raw=items,
+    )
+
+
+def _dataframe_items(df: pd.DataFrame) -> list[dict[str, object]]:
+    return cast(list[dict[str, object]], df.to_dict(orient="records"))
+
+
 def _sample_long_dataframe() -> pd.DataFrame:
     """Create a synthetic long-format KOSIS DataFrame.
 
     Two regions (Seoul 11, Busan 26), each with 3 metrics (T20, T25, T30).
     C2="00" marks aggregate/total rows.
     """
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, object]] = []
     regions = [("11", "서울특별시"), ("26", "부산광역시")]
     metrics = [
         ("T20", "전입", "150000"),
@@ -73,9 +99,13 @@ def _sample_long_dataframe() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _sample_long_batch() -> RecordBatch:
+    return _record_batch(_dataframe_items(_sample_long_dataframe()))
+
+
 def _sample_with_non_aggregate_rows() -> pd.DataFrame:
     """DataFrame mixing aggregate (C2='00') and non-aggregate (C2='11') rows."""
-    rows: list[dict[str, Any]] = [
+    rows: list[dict[str, object]] = [
         # Aggregate row — should be kept
         {
             "C1": "11",
@@ -100,6 +130,10 @@ def _sample_with_non_aggregate_rows() -> pd.DataFrame:
         },
     ]
     return pd.DataFrame(rows)
+
+
+def _sample_with_non_aggregate_batch() -> RecordBatch:
+    return _record_batch(_dataframe_items(_sample_with_non_aggregate_rows()))
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +322,7 @@ class TestPivotToRegionRows:
 
 class TestKostatMigrationConnector:
     def _make_connector(self, client: MagicMock | None = None) -> tuple[KostatMigrationConnector, MagicMock]:
-        mock_client = client or MagicMock()
+        mock_client = client or MagicMock(spec=Dataset)
         connector = KostatMigrationConnector(
             client=mock_client,
             rate_limiter=_make_rate_limiter(),
@@ -303,7 +337,7 @@ class TestKostatMigrationConnector:
     def test_full_row_mapping(self) -> None:
         """Map a long-format KOSIS DataFrame to BronzeMigration records."""
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = _sample_long_dataframe()
+        mock_client.list.return_value = _sample_long_batch()
 
         request = _default_request()
         result = connector.fetch(request)
@@ -330,7 +364,7 @@ class TestKostatMigrationConnector:
 
     def test_empty_dataframe_returns_empty_result(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = pd.DataFrame()
+        mock_client.list.return_value = _record_batch([])
 
         request = _default_request()
         result = connector.fetch(request)
@@ -339,9 +373,9 @@ class TestKostatMigrationConnector:
         assert result.manifest.response_count == 0
         assert result.manifest.status == "success"
 
-    def test_none_response_returns_empty_result(self) -> None:
+    def test_empty_record_batch_returns_empty_result(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = None
+        mock_client.list.return_value = _record_batch([])
 
         request = _default_request()
         result = connector.fetch(request)
@@ -352,7 +386,7 @@ class TestKostatMigrationConnector:
 
     def test_api_failure_returns_failed_manifest(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_data.side_effect = ConnectorError("KOSIS timeout")
+        mock_client.list.side_effect = ConnectorError("KOSIS timeout")
 
         request = _default_request()
         result = connector.fetch(request)
@@ -364,7 +398,7 @@ class TestKostatMigrationConnector:
     def test_missing_columns_raises_non_retryable(self) -> None:
         connector, mock_client = self._make_connector()
         # DataFrame with only some required columns
-        mock_client.get_data.return_value = pd.DataFrame({"C1": ["11"], "DT": ["100"]})
+        mock_client.list.return_value = _record_batch([{"C1": "11", "DT": "100"}])
 
         request = _default_request()
         with pytest.raises(NonRetryableError, match="Missing expected columns"):
@@ -372,7 +406,7 @@ class TestKostatMigrationConnector:
 
     def test_manifest_fields_correct(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = _sample_long_dataframe()
+        mock_client.list.return_value = _sample_long_batch()
 
         request = _default_request()
         result = connector.fetch(request)
@@ -391,8 +425,8 @@ class TestKostatMigrationConnector:
 
     def test_rate_limiter_called(self) -> None:
         mock_limiter = MagicMock(spec=RateLimiter)
-        mock_client = MagicMock()
-        mock_client.get_data.return_value = _sample_long_dataframe()
+        mock_client = MagicMock(spec=Dataset)
+        mock_client.list.return_value = _sample_long_batch()
 
         connector = KostatMigrationConnector(
             client=mock_client,
@@ -406,12 +440,12 @@ class TestKostatMigrationConnector:
 
     def test_hash_deterministic_for_same_data(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = _sample_long_dataframe()
+        mock_client.list.return_value = _sample_long_batch()
 
         request = _default_request()
         r1 = connector.fetch(request)
 
-        mock_client.get_data.return_value = _sample_long_dataframe()
+        mock_client.list.return_value = _sample_long_batch()
         r2 = connector.fetch(request)
 
         assert r1.records[0].raw_response_hash == r2.records[0].raw_response_hash
@@ -419,16 +453,18 @@ class TestKostatMigrationConnector:
     def test_filtered_to_no_metrics_returns_empty(self) -> None:
         """DataFrame with valid columns but no target metrics → empty result."""
         connector, mock_client = self._make_connector()
-        mock_client.get_data.return_value = pd.DataFrame(
-            {
-                "C1": ["11"],
-                "C1_NM": ["서울특별시"],
-                "C2": ["00"],
-                "ITM_ID": ["T99"],  # Not a target metric
-                "ITM_NM": ["기타"],
-                "PRD_DE": ["202301"],
-                "DT": ["100"],
-            }
+        mock_client.list.return_value = _record_batch(
+            [
+                {
+                    "C1": "11",
+                    "C1_NM": "서울특별시",
+                    "C2": "00",
+                    "ITM_ID": "T99",
+                    "ITM_NM": "기타",
+                    "PRD_DE": "202301",
+                    "DT": "100",
+                }
+            ]
         )
 
         request = _default_request()
@@ -468,7 +504,7 @@ class TestKostatMigrationConnector:
             ]
         )
         full_df = pd.concat([df, extra], ignore_index=True)
-        mock_client.get_data.return_value = full_df
+        mock_client.list.return_value = _record_batch(_dataframe_items(full_df))
 
         request = _default_request()
         result = connector.fetch(request)
@@ -487,7 +523,7 @@ class TestKostatMigrationRequest:
     def test_frozen(self) -> None:
         req = _default_request()
         with pytest.raises(AttributeError):
-            req.year_month = "202302"  # type: ignore[misc]
+            setattr(req, "year_month", "202302")
 
     def test_fields(self) -> None:
         req = _default_request()

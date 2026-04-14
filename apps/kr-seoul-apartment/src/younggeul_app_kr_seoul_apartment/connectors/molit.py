@@ -1,5 +1,3 @@
-"""MOLIT apartment transaction connector using PublicDataReader."""
-
 from __future__ import annotations
 
 import math
@@ -9,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, ClassVar
 
 import pandas as pd
-from PublicDataReader import TransactionPrice
+from kpubdata.core.dataset import Dataset
 
 from younggeul_core.connectors.hashing import sha256_payload
 from younggeul_core.connectors.manifest import build_manifest
@@ -18,67 +16,58 @@ from younggeul_core.connectors.rate_limit import RateLimiter
 from younggeul_core.connectors.retry import NonRetryableError, retry
 from younggeul_core.state.bronze import BronzeAptTransaction
 
-# ---------------------------------------------------------------------------
-# Column mapping: PublicDataReader Korean column → BronzeAptTransaction field
-# ---------------------------------------------------------------------------
-# PublicDataReader returns columns in Korean when translate=True (default).
-# Some column names differ from the raw MOLIT API names.
-# ---------------------------------------------------------------------------
-
 COLUMN_MAP: dict[str, str] = {
-    "거래금액": "deal_amount",
-    "건축년도": "build_year",
-    "년": "deal_year",
-    "월": "deal_month",
-    "일": "deal_day",
-    "법정동": "dong",
-    "아파트": "apt_name",
-    "층": "floor",
-    "전용면적": "area_exclusive",
-    "지번": "jibun",
-    "법정동시군구코드": "regional_code",
-    "아파트동": "apt_dong",
-    "도로명": "road_name",
-    "도로명건물본번호코드": "road_name_bonbun",
-    "도로명건물부번호코드": "road_name_bubun",
-    "도로명코드": "road_name_code",
-    "도로명일련번호코드": "road_name_seq",
-    "도로명지상지하코드": "road_name_basement",
-    "본번": "bonbun",
-    "부번": "bubun",
-    "지역코드": "land_code",
-    "일련번호": "serial_number",
-    "해제여부": "cancel_deal_type",
-    "해제사유발생일": "cancel_deal_day",
-    "거래유형": "req_gbn",
-    "중개사소재지": "rdealer_lawdnm",
-    "매수자": "buyer_gbn",
-    "매도자": "seller_gbn",
-    "등기일자": "registration_date",
-    "시군구코드": "sgg_code",
-    "읍면동코드": "umd_code",
+    "dealAmount": "deal_amount",
+    "buildYear": "build_year",
+    "dealYear": "deal_year",
+    "dealMonth": "deal_month",
+    "dealDay": "deal_day",
+    "umdNm": "dong",
+    "aptNm": "apt_name",
+    "floor": "floor",
+    "excluUseAr": "area_exclusive",
+    "jibun": "jibun",
+    "sggCd": "regional_code",
+    "aptDong": "apt_dong",
+    "roadNm": "road_name",
+    "roadNmBonbun": "road_name_bonbun",
+    "roadNmBubun": "road_name_bubun",
+    "roadNmCd": "road_name_code",
+    "roadNmSeq": "road_name_seq",
+    "roadNmBasementCd": "road_name_basement",
+    "bonbun": "bonbun",
+    "bubun": "bubun",
+    "landCd": "land_code",
+    "slerGbn": "seller_gbn",
+    "buyerGbn": "buyer_gbn",
+    "aptSeq": "serial_number",
+    "cdealType": "cancel_deal_type",
+    "cdealDay": "cancel_deal_day",
+    "dealingGbn": "req_gbn",
+    "estateAgentSggNm": "rdealer_lawdnm",
+    "rgstDate": "registration_date",
+    "umdCd": "umd_code",
 }
 
 # Fields that are numeric in pandas but should be clean integer strings
 # (e.g., 2023.0 → "2023", 11650.0 → "11650")
 _INT_LIKE_FIELDS: frozenset[str] = frozenset(
     {
-        "건축년도",
-        "년",
-        "월",
-        "일",
-        "층",
-        "법정동시군구코드",
-        "도로명건물본번호코드",
-        "도로명건물부번호코드",
-        "도로명코드",
-        "도로명일련번호코드",
-        "도로명지상지하코드",
-        "본번",
-        "부번",
-        "지역코드",
-        "시군구코드",
-        "읍면동코드",
+        "buildYear",
+        "dealYear",
+        "dealMonth",
+        "dealDay",
+        "floor",
+        "sggCd",
+        "roadNmBonbun",
+        "roadNmBubun",
+        "roadNmCd",
+        "roadNmSeq",
+        "roadNmBasementCd",
+        "bonbun",
+        "bubun",
+        "landCd",
+        "umdCd",
     }
 )
 
@@ -111,14 +100,10 @@ def _safe_str(value: object, *, int_like: bool = False) -> str | None:
     return str(value)
 
 
-def _normalize_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
-    """Convert DataFrame rows to dicts with NaN→None and int-like float fix.
-
-    Returns raw dicts with Korean column names (not yet mapped to Bronze fields).
-    """
-    rows: list[dict[str, Any]] = []
+def _normalize_dataframe(df: pd.DataFrame) -> list[dict[str, object | None]]:
+    rows: list[dict[str, object | None]] = []
     for _, series in df.iterrows():
-        row: dict[str, Any] = {}
+        row: dict[str, object | None] = {}
         for col in df.columns:
             row[col] = _safe_str(series[col], int_like=col in _INT_LIKE_FIELDS)
         rows.append(row)
@@ -126,13 +111,12 @@ def _normalize_dataframe(df: pd.DataFrame) -> list[dict[str, Any]]:
 
 
 def _map_to_bronze(
-    raw_rows: list[dict[str, Any]],
+    raw_rows: list[dict[str, object | None]],
     *,
     source_id: str,
     ingest_timestamp: datetime,
     raw_response_hash: str,
 ) -> list[BronzeAptTransaction]:
-    """Map normalized raw dicts (Korean keys) to BronzeAptTransaction records."""
     records: list[BronzeAptTransaction] = []
     for raw in raw_rows:
         mapped: dict[str, Any] = {
@@ -140,11 +124,10 @@ def _map_to_bronze(
             "source_id": source_id,
             "raw_response_hash": raw_response_hash,
         }
-        for korean_col, bronze_field in COLUMN_MAP.items():
-            mapped[bronze_field] = raw.get(korean_col)
+        for raw_col, bronze_field in COLUMN_MAP.items():
+            mapped[bronze_field] = raw.get(raw_col)
 
-        # 법정동시군구코드 maps to both regional_code and sgg_code
-        sgg_value = raw.get("법정동시군구코드")
+        sgg_value = raw.get("sggCd")
         if sgg_value is not None:
             mapped["sgg_code"] = sgg_value
 
@@ -153,7 +136,7 @@ def _map_to_bronze(
 
 
 class MolitAptConnector:
-    """Connector for MOLIT apartment transaction data via PublicDataReader.
+    """Connector for MOLIT apartment transaction data via kpubdata.
 
     Satisfies ``Connector[MolitAptRequest, BronzeAptTransaction]`` protocol.
     """
@@ -162,7 +145,7 @@ class MolitAptConnector:
 
     def __init__(
         self,
-        client: TransactionPrice,
+        client: Dataset,
         rate_limiter: RateLimiter,
         now_fn: Callable[[], datetime] = _utc_now,
     ) -> None:
@@ -184,12 +167,11 @@ class MolitAptConnector:
         # Retry wraps only the API call; rate limit inside retried callable
         def _call_api() -> pd.DataFrame:
             self._rate_limiter.wait()
-            result: pd.DataFrame = self._client.get_data(
-                property_type="아파트",
-                trade_type="매매",
-                sigungu_code=request.sigungu_code,
-                year_month=request.year_month,
+            batch = self._client.list(
+                LAWD_CD=request.sigungu_code,
+                DEAL_YMD=request.year_month,
             )
+            result = pd.DataFrame(batch.items)
             return result
 
         try:

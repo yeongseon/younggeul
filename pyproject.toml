@@ -48,7 +48,7 @@ observability = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
-  "PublicDataReader>=1.1",
+  "kpubdata @ git+https://github.com/yeongseon/kpubdata.git@main",
   "pandas>=2.0",
 ]
 docs = [
@@ -56,6 +56,9 @@ docs = [
   "mkdocs>=1.5",
   "mkdocstrings[python]>=0.25",
 ]
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = [
@@ -82,7 +85,7 @@ module = ["core.*"]
 strict = true
 
 [[tool.mypy.overrides]]
-module = ["PublicDataReader", "PublicDataReader.*"]
+module = ["kpubdata", "kpubdata.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]

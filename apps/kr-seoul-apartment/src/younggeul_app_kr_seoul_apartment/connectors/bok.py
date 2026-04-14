@@ -1,4 +1,4 @@
-"""BOK (Bank of Korea) interest rate connector using PublicDataReader."""
+"""BOK (Bank of Korea) interest rate connector using kpubdata."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import math
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, ClassVar
+from typing import ClassVar
 
 import pandas as pd
-from PublicDataReader import Ecos
+from kpubdata.core.dataset import Dataset
 
 from younggeul_core.connectors.hashing import sha256_payload
 from younggeul_core.connectors.manifest import build_manifest
@@ -21,7 +21,6 @@ from younggeul_core.state.bronze import BronzeInterestRate
 # ---------------------------------------------------------------------------
 # Required columns from the ECOS StatisticSearch response
 # ---------------------------------------------------------------------------
-# The Ecos.get_statistic_search() returns a DataFrame with these columns.
 # We validate their presence and extract only what BronzeInterestRate needs.
 # ---------------------------------------------------------------------------
 
@@ -106,7 +105,7 @@ def _normalize_dataframe(
     df: pd.DataFrame,
     *,
     frequency: str,
-) -> list[dict[str, Any]]:
+) -> list[dict[str, object]]:
     """Convert ECOS DataFrame rows to normalized dicts.
 
     - NaN → None
@@ -114,9 +113,9 @@ def _normalize_dataframe(
     - All values converted to strings
     - Includes identity columns for hash completeness
     """
-    rows: list[dict[str, Any]] = []
+    rows: list[dict[str, object]] = []
     for _, series in df.iterrows():
-        row: dict[str, Any] = {}
+        row: dict[str, object] = {}
         for col in df.columns:
             if col == "TIME":
                 raw_time = _safe_str(series[col])
@@ -127,8 +126,13 @@ def _normalize_dataframe(
     return rows
 
 
+def _optional_str(row: dict[str, object], key: str) -> str | None:
+    value = row.get(key)
+    return value if isinstance(value, str) else None
+
+
 def _map_to_bronze(
-    raw_rows: list[dict[str, Any]],
+    raw_rows: list[dict[str, object]],
     *,
     rate_type: str,
     source_id: str,
@@ -143,17 +147,17 @@ def _map_to_bronze(
                 ingest_timestamp=ingest_timestamp,
                 source_id=source_id,
                 raw_response_hash=raw_response_hash,
-                date=raw.get("TIME"),
+                date=_optional_str(raw, "TIME"),
                 rate_type=rate_type,
-                rate_value=raw.get("DATA_VALUE"),
-                unit=raw.get("UNIT_NAME"),
+                rate_value=_optional_str(raw, "DATA_VALUE"),
+                unit=_optional_str(raw, "UNIT_NAME"),
             )
         )
     return records
 
 
 class BokInterestRateConnector:
-    """Connector for BOK interest rate data via PublicDataReader ECOS API.
+    """Connector for BOK interest rate data via kpubdata BOK dataset.
 
     Satisfies ``Connector[BokInterestRateRequest, BronzeInterestRate]`` protocol.
     """
@@ -162,7 +166,7 @@ class BokInterestRateConnector:
 
     def __init__(
         self,
-        client: Ecos,
+        client: Dataset,
         rate_limiter: RateLimiter,
         now_fn: Callable[[], datetime] = _utc_now,
     ) -> None:
@@ -183,13 +187,12 @@ class BokInterestRateConnector:
 
         def _call_api() -> pd.DataFrame:
             self._rate_limiter.wait()
-            result: pd.DataFrame = self._client.get_statistic_search(
-                통계표코드=request.stat_code,
-                주기=request.frequency,
-                검색시작일자=request.start_date,
-                검색종료일자=request.end_date,
-                통계항목코드1=request.item_code1,
+            batch = self._client.list(
+                start_date=request.start_date,
+                end_date=request.end_date,
+                frequency=request.frequency,
             )
+            result = pd.DataFrame(batch.items)
             return result
 
         request_params = {
