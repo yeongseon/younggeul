@@ -75,7 +75,21 @@ younggeul eval --output-dir ./eval_results
 | BOK ECOS | 한국은행 | Base interest rates |
 | KOSTAT KOSIS | 통계청 | Population migration |
 
-Data is accessed through [PublicDataReader](https://github.com/WooilJeong/PublicDataReader). v0.1 includes fixture data so no API key is needed for local development.
+Data is accessed through [kpubdata](https://pypi.org/project/kpubdata/), a unified client for Korean public data APIs. v0.1 includes fixture data so no API key is needed for local development; live ingest is opt-in (see below).
+
+### Live ingest (optional)
+
+To fetch real data from MOLIT, BOK, and KOSTAT, set three API keys in your environment and use `--source live`:
+
+```bash
+export KPUBDATA_DATAGO_API_KEY=...   # data.go.kr (MOLIT RTMS)
+export KPUBDATA_BOK_API_KEY=...      # 한국은행 ECOS
+export KPUBDATA_KOSIS_API_KEY=...    # 통계청 KOSIS
+
+younggeul ingest --source live --gu 11680 --month 202503 --output-dir ./output/live
+```
+
+`--gu` is a 5-digit MOLIT sigungu code (e.g. `11680` = 강남구) and `--month` is `YYYYMM`. v0.1 covers one gu × one month per invocation. See [ADR-007](docs/adr/007-kpubdata-live-ingest.md) for the design and current scope (KOSTAT migration is not emitted in live mode for v0.1).
 
 ## v0.1 Scope
 
@@ -143,6 +157,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-004](docs/adr/004-langgraph-boundaries.md) | No `add_messages`; typed state only |
 | [ADR-005](docs/adr/005-evidence-gated-reporting.md) | Three-phase evidence-gated reporting |
 | [ADR-006](docs/adr/006-public-data-policy.md) | No raw data in git; manifests only |
+| [ADR-007](docs/adr/007-kpubdata-live-ingest.md) | Live ingest via kpubdata unified client |
 
 ## License
 

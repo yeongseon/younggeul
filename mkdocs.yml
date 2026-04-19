@@ -92,6 +92,7 @@ nav:
     - ADR-004 LangGraph Boundaries: adr/004-langgraph-boundaries.md
     - ADR-005 Evidence-Gated Reporting: adr/005-evidence-gated-reporting.md
     - ADR-006 Public Data Policy: adr/006-public-data-policy.md
+    - ADR-007 kpubdata Live Ingest: adr/007-kpubdata-live-ingest.md
   - API Reference:
     - Overview: api/index.md
     - Core:

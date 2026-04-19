@@ -207,10 +207,6 @@ class KostatMigrationConnector:
             batch = self._client.list(
                 start_date=request.year_month,
                 end_date=request.year_month,
-                objL1="ALL",
-                objL2="ALL",
-                itmId="T20+T25+T30",
-                prdSe="M",
             )
             return pd.DataFrame(batch.items)
 

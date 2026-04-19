@@ -16,10 +16,10 @@ format: ## Auto-format code
 	ruff format .
 
 test: ## Run unit tests only
-	pytest -m "not slow and not integration" --cov
+	pytest -m "not slow and not integration and not live" --cov
 
 test-all: ## Run all tests including integration
-	pytest --cov
+	pytest -m "not live" --cov
 
 test-contract: ## Run contract tests only
 	PYTHONPATH=core/src:benchmarks/kr-housing/src python3 -m pytest core/tests/contract/ benchmarks/kr-housing/tests/ -v

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
 from younggeul_core.connectors.hashing import sha256_payload
 from younggeul_core.state.bronze import BronzeAptTransaction
@@ -282,6 +282,8 @@ def normalize_apt_transaction(bronze: BronzeAptTransaction) -> SilverAptTransact
     build_year = parse_int(bronze.build_year)
     floor = parse_int(bronze.floor)
     area_exclusive_m2 = parse_decimal(bronze.area_exclusive)
+    if area_exclusive_m2 is not None:
+        area_exclusive_m2 = area_exclusive_m2.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
     if deal_amount is None or deal_date is None or build_year is None or floor is None or area_exclusive_m2 is None:
         return None

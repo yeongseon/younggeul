@@ -219,11 +219,50 @@ def main(ctx: click.Context, output: str) -> None:
     default=Path("./output/pipeline"),
     show_default=True,
 )
+@click.option(
+    "--source",
+    type=click.Choice(["fixture", "live"]),
+    default="fixture",
+    show_default=True,
+    help="Data source: 'fixture' uses bundled toy data; 'live' fetches from real APIs via kpubdata.",
+)
+@click.option(
+    "--gu",
+    "lawd_code",
+    default=None,
+    help="5-digit MOLIT sigungu code (required when --source=live, e.g. 11680 for Gangnam-gu).",
+)
+@click.option(
+    "--month",
+    "deal_ym",
+    default=None,
+    help="Target month in YYYYMM format (required when --source=live, e.g. 202503).",
+)
 @click.pass_context
-def ingest_command(ctx: click.Context, output_dir: Path) -> None:
-    """Ingest fixture Bronze data and write Gold JSONL output."""
+def ingest_command(
+    ctx: click.Context,
+    output_dir: Path,
+    source: str,
+    lawd_code: str | None,
+    deal_ym: str | None,
+) -> None:
+    """Ingest Bronze data and write Gold JSONL output.
+
+    Default ``--source=fixture`` uses bundled toy data and requires no API keys.
+    ``--source=live`` requires ``--gu`` and ``--month`` plus the
+    ``KPUBDATA_DATAGO_API_KEY`` and ``KPUBDATA_BOK_API_KEY`` environment variables.
+    """
     try:
-        bronze = _fixture_bronze_input()
+        if source == "live":
+            if not lawd_code or not deal_ym:
+                raise click.ClickException("--gu and --month are required when --source=live")
+            from younggeul_app_kr_seoul_apartment.connectors.client_factory import build_client
+            from younggeul_app_kr_seoul_apartment.pipeline_live import run_live_ingest
+
+            client = build_client()
+            bronze = run_live_ingest(client=client, lawd_code=lawd_code, deal_ym=deal_ym)
+        else:
+            bronze = _fixture_bronze_input()
         result = run_pipeline(bronze)
 
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -235,6 +274,7 @@ def ingest_command(ctx: click.Context, output_dir: Path) -> None:
 
         data = {
             "status": "success",
+            "source": source,
             "silver_apt_count": len(result.silver.apt_transactions),
             "silver_rate_count": len(result.silver.interest_rates),
             "silver_migration_count": len(result.silver.migrations),

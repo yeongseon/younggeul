@@ -48,7 +48,7 @@ observability = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
-  "kpubdata @ git+https://github.com/yeongseon/kpubdata.git@main",
+  "kpubdata>=0.2.3",
   "pandas>=2.0",
 ]
 docs = [
@@ -103,4 +103,5 @@ markers = [
   "slow: marks tests as slow",
   "integration: marks integration tests",
   "eval: marks evaluation tests (simulation quality, regression)",
+  "live: marks tests that hit live external APIs (gated by env vars)",
 ]

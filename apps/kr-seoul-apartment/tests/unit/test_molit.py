@@ -69,7 +69,7 @@ def _sample_items() -> list[dict[str, object]]:
             "roadNmBubun": "1",
             "roadNmCd": "4100001",
             "roadNmSeq": "1",
-            "roadNmBasementCd": "0",
+            "roadNmbCd": "0",
             "bonbun": "123",
             "bubun": "1",
             "landCd": "680",
