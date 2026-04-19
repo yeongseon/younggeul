@@ -18,7 +18,7 @@ There is a critical need for an open-source, evidence-gated simulation platform 
 
 ## 4. Product Vision
 To provide an agent-based simulation platform that:
-- Ingests official Korean government data (PublicDataReader).
+- Ingests official Korean government data via the kpubdata unified client (MOLIT, BOK, KOSIS).
 - Runs multi-agent market simulations via LangGraph.
 - Produces evidence-gated reports with zero hallucinations and 100% citation coverage.
 
@@ -41,7 +41,7 @@ To provide an agent-based simulation platform that:
 
 ## 6. Key Features (Milestones)
 - **M1: Data Contracts & Schemas**: Define Bronze/Silver/Gold data tiers using Pydantic v2.
-- **M2: Data Connectors**: Integration with `data.go.kr` via PublicDataReader.
+- **M2: Data Connectors**: Integration with `data.go.kr` (MOLIT), BOK ECOS, and KOSIS via the [kpubdata](https://pypi.org/project/kpubdata/) unified client (see ADR-007).
 - **M3: Data Pipeline**: Deterministic ETL (Bronze → Silver → Gold) without LLM intervention.
 - **M4: Snapshot System**: Immutable datasets with `dataset_snapshot_id` and SHA-256 verification (Reference: ADR-003).
 - **M5: Simulation Core**: LangGraph state machine combining 5 LLM agents and 5 deterministic nodes (Reference: ADR-004).

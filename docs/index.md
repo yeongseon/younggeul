@@ -56,4 +56,4 @@ Korean housing discourse often mixes anecdote with data. Younggeul aims to make 
 
 ## v0.1 Scope
 
-v0.1 targets **Seoul apartment transactions only**, using fixture data so no API key is required for local development. Real data ingestion requires a [PublicDataReader](https://github.com/WooilJeong/PublicDataReader) API key from data.go.kr.
+v0.1 targets **Seoul apartment transactions only**, using fixture data so no API key is required for local development. Real data ingestion uses the [kpubdata](https://pypi.org/project/kpubdata/) unified client and requires `KPUBDATA_DATAGO_API_KEY`, `KPUBDATA_BOK_API_KEY`, and `KPUBDATA_KOSIS_API_KEY` environment variables (see [ADR-007](adr/007-kpubdata-live-ingest.md)).
