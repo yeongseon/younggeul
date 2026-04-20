@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from importlib import import_module
+import os
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -91,6 +92,9 @@ class TestNormalizeProvider:
         assert _normalize_provider("VLLM/model") == "vllm"
         assert _normalize_provider("Azure/gpt-4") == "azure"
 
+    def test_github_prefix(self) -> None:
+        assert _normalize_provider("github/openai/gpt-4o-mini") == "github"
+
     def test_unknown_org_prefix_defaults_to_openai(self) -> None:
         assert _normalize_provider("meta-llama/Meta-Llama-3") == "openai"
 
@@ -107,6 +111,49 @@ class TestNormalizeProvider:
 
 
 class TestGenerateStructuredSpans:
+    def test_github_models_route_uses_openai_compatible_endpoint(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.setenv("GH_MODELS_TOKEN", "ghs_test_token")
+
+        adapter = LiteLLMStructuredLLM(model="github/openai/gpt-4o-mini")
+        mock_litellm = MagicMock()
+        mock_litellm.completion.return_value = SimpleNamespace(
+            model="openai/gpt-4o-mini",
+            usage=SimpleNamespace(prompt_tokens=3, completion_tokens=4, total_tokens=7),
+            _hidden_params={},
+            choices=[_choice('{"message":"ok"}', finish_reason="stop")],
+        )
+
+        with patch.dict("sys.modules", {"litellm": mock_litellm}):
+            result = adapter.generate_structured(
+                messages=[{"role": "user", "content": "hello"}],
+                response_model=_StructuredResponse,
+            )
+
+        assert result == _StructuredResponse(message="ok")
+        kwargs = mock_litellm.completion.call_args.kwargs
+        assert kwargs["model"] == "openai/gpt-4o-mini"
+        assert kwargs["custom_llm_provider"] == "openai"
+        assert kwargs["api_base"] == "https://models.github.ai/inference"
+        assert kwargs["api_key"] == "ghs_test_token"
+        assert os.environ["GITHUB_TOKEN"] == "ghs_test_token"
+
+    def test_github_models_route_requires_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monkeypatch.delenv("GITHUB_TOKEN", raising=False)
+        monkeypatch.delenv("GH_MODELS_TOKEN", raising=False)
+
+        adapter = LiteLLMStructuredLLM(model="github/openai/gpt-4o-mini")
+        mock_litellm = MagicMock()
+
+        with patch.dict("sys.modules", {"litellm": mock_litellm}):
+            with pytest.raises(StructuredLLMTransportError, match="GH_MODELS_TOKEN or GITHUB_TOKEN"):
+                adapter.generate_structured(
+                    messages=[{"role": "user", "content": "hello"}],
+                    response_model=_StructuredResponse,
+                )
+
+        mock_litellm.completion.assert_not_called()
+
     def test_creates_child_span_with_all_attributes(self) -> None:
         adapter = LiteLLMStructuredLLM(model="vllm/meta-llama")
         tracer, exporter = _make_test_tracer()

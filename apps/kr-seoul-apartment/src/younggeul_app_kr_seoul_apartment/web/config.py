@@ -4,7 +4,7 @@ import os
 
 
 def get_allowed_models() -> tuple[str, ...]:
-    raw = os.getenv("YOUNGGEUL_ALLOWED_MODELS", "stub,gpt-4o-mini")
+    raw = os.getenv("YOUNGGEUL_ALLOWED_MODELS", "stub,gpt-4o-mini,github/openai/gpt-4o-mini")
     models = tuple(model.strip() for model in raw.split(",") if model.strip())
     return models or ("stub",)
 
