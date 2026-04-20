@@ -26,6 +26,7 @@ from younggeul_app_kr_seoul_apartment.pipeline_live import (
 GANGNAM_LAWD_CODE = "11680"
 TARGET_DEAL_YM = "202503"
 PRIOR_DEAL_YM = "202403"
+PRIOR_MONTH_DEAL_YM = "202502"
 
 
 def _env_keys_present() -> bool:
@@ -88,3 +89,21 @@ def test_live_ingest_months_yoy_change_is_populated() -> None:
     assert prior_period in by_period
     assert by_period[target_period].yoy_price_change is not None
     assert by_period[target_period].yoy_volume_change is not None
+
+
+def test_live_ingest_consecutive_months_populates_mom_change() -> None:
+    client = build_client()
+
+    bronze = run_live_ingest_months(
+        client=client,
+        lawd_code=GANGNAM_LAWD_CODE,
+        deal_yms=[PRIOR_MONTH_DEAL_YM, TARGET_DEAL_YM],
+    )
+
+    result = run_pipeline(bronze)
+
+    by_period = {gold.period: gold for gold in result.gold}
+    target_period = f"{TARGET_DEAL_YM[:4]}-{TARGET_DEAL_YM[4:]}"
+    assert target_period in by_period
+    assert by_period[target_period].mom_price_change is not None
+    assert by_period[target_period].mom_volume_change is not None

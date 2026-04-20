@@ -67,8 +67,11 @@ set -a; source .env; set +a
 # Single month
 younggeul ingest --source live --gu 11680 --month 202503 --output-dir ./output/live
 
-# Multi-month (populates YoY/MoM in Gold)
+# Year-over-year (populates yoy_*_change in Gold)
 younggeul ingest --source live --gu 11680 --months 202403,202503 --output-dir ./output/live-yoy
+
+# Month-over-month (populates mom_*_change in Gold)
+younggeul ingest --source live --gu 11680 --months 202502,202503 --output-dir ./output/live-mom
 ```
 
 The default fixture path remains:
