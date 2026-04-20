@@ -230,7 +230,13 @@ def main(ctx: click.Context, output: str) -> None:
     "--gu",
     "lawd_code",
     default=None,
-    help="5-digit MOLIT sigungu code (required when --source=live, e.g. 11680 for Gangnam-gu).",
+    help="5-digit MOLIT sigungu code (live mode, e.g. 11680). Mutually exclusive with --gus.",
+)
+@click.option(
+    "--gus",
+    "lawd_codes_csv",
+    default=None,
+    help="Comma-separated 5-digit MOLIT sigungu codes (live mode, e.g. 11680,11440). Mutually exclusive with --gu.",
 )
 @click.option(
     "--month",
@@ -250,26 +256,35 @@ def ingest_command(
     output_dir: Path,
     source: str,
     lawd_code: str | None,
+    lawd_codes_csv: str | None,
     deal_ym: str | None,
     deal_yms_csv: str | None,
 ) -> None:
     """Ingest Bronze data and write Gold JSONL output.
 
     Default ``--source=fixture`` uses bundled toy data and requires no API keys.
-    ``--source=live`` requires ``--gu`` and exactly one of ``--month`` or
-    ``--months`` plus the ``KPUBDATA_DATAGO_API_KEY`` and
+    ``--source=live`` requires exactly one of ``--gu`` or ``--gus`` and exactly
+    one of ``--month`` or ``--months`` plus the ``KPUBDATA_DATAGO_API_KEY`` and
     ``KPUBDATA_BOK_API_KEY`` environment variables.
     """
     try:
         if source == "live":
-            if not lawd_code:
-                raise click.ClickException("--gu is required when --source=live")
+            if lawd_code and lawd_codes_csv:
+                raise click.ClickException("--gu and --gus are mutually exclusive")
+            if not lawd_code and not lawd_codes_csv:
+                raise click.ClickException("exactly one of --gu or --gus is required when --source=live")
             if deal_ym and deal_yms_csv:
                 raise click.ClickException("--month and --months are mutually exclusive")
             if not deal_ym and not deal_yms_csv:
                 raise click.ClickException("exactly one of --month or --months is required when --source=live")
             from younggeul_app_kr_seoul_apartment.connectors.client_factory import build_client
-            from younggeul_app_kr_seoul_apartment.pipeline_live import run_live_ingest_months
+            from younggeul_app_kr_seoul_apartment.pipeline_live import run_live_ingest_gus_months
+
+            if lawd_codes_csv:
+                lawd_codes = [code.strip() for code in lawd_codes_csv.split(",") if code.strip()]
+            else:
+                assert lawd_code is not None
+                lawd_codes = [lawd_code]
 
             if deal_yms_csv:
                 deal_yms = [ym.strip() for ym in deal_yms_csv.split(",") if ym.strip()]
@@ -278,7 +293,7 @@ def ingest_command(
                 deal_yms = [deal_ym]
 
             client = build_client()
-            bronze = run_live_ingest_months(client=client, lawd_code=lawd_code, deal_yms=deal_yms)
+            bronze = run_live_ingest_gus_months(client=client, lawd_codes=lawd_codes, deal_yms=deal_yms)
         else:
             bronze = _fixture_bronze_input()
         result = run_pipeline(bronze)

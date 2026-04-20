@@ -86,7 +86,7 @@ def test_ingest_live_requires_gu(runner: CliRunner, tmp_path: Path) -> None:
     )
 
     assert result.exit_code != 0
-    assert "--gu is required" in result.output
+    assert "exactly one of --gu or --gus" in result.output
 
 
 def test_ingest_live_requires_month_or_months(runner: CliRunner, tmp_path: Path) -> None:
@@ -119,6 +119,28 @@ def test_ingest_live_rejects_month_and_months_together(runner: CliRunner, tmp_pa
 
     assert result.exit_code != 0
     assert "mutually exclusive" in result.output
+
+
+def test_ingest_live_rejects_gu_and_gus_together(runner: CliRunner, tmp_path: Path) -> None:
+    result = runner.invoke(
+        cli.main,
+        [
+            "ingest",
+            "--source",
+            "live",
+            "--gu",
+            "11680",
+            "--gus",
+            "11680,11440",
+            "--month",
+            "202503",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--gu and --gus are mutually exclusive" in result.output
 
 
 def test_simulate_runs_successfully(runner: CliRunner, tmp_path: Path) -> None:
