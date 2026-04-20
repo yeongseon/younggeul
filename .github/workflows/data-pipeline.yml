@@ -36,7 +36,7 @@ jobs:
       - name: Run collector
         run: 'echo "TODO: python -m younggeul_app_kr_seoul_apartment.pipeline.collector"'
       - name: Upload manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: ingest-manifest
