@@ -57,7 +57,9 @@ def test_live_ingest_gangnam_202503_produces_gold_output() -> None:
 
     assert len(bronze.apt_transactions) > 0
     assert len(bronze.interest_rates) == 1
-    assert bronze.migrations == []
+    assert len(bronze.migrations) > 0
+    seoul_codes = {m.region_code for m in bronze.migrations}
+    assert GANGNAM_LAWD_CODE[:2] in seoul_codes
 
     result = run_pipeline(bronze)
 
@@ -66,6 +68,7 @@ def test_live_ingest_gangnam_202503_produces_gold_output() -> None:
     assert gold.gu_code.startswith(GANGNAM_LAWD_CODE[:2])
     assert gold.period == f"{TARGET_DEAL_YM[:4]}-{TARGET_DEAL_YM[4:]}"
     assert gold.median_price > 0
+    assert gold.net_migration is not None
 
 
 def test_live_ingest_months_yoy_change_is_populated() -> None:

@@ -1,31 +1,28 @@
-"""Unit tests for KostatMigrationConnector."""
-
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock
 
+import pandas as pd
+import pytest
 from kpubdata.core.dataset import Dataset
 from kpubdata.core.models import DatasetRef, RecordBatch
 from kpubdata.core.representation import Representation
-import numpy as np
-import pandas as pd
-import pytest
 
 from younggeul_app_kr_seoul_apartment.connectors.kostat import (
-    METRIC_MAP,
+    NATIONAL_AGGREGATE_CODE,
     REQUIRED_COLUMNS,
+    TARGET_ITM_IDS,
     KostatMigrationConnector,
     KostatMigrationRequest,
-    _filter_aggregate_rows,
     _filter_target_metrics,
     _pivot_to_region_rows,
     _safe_str,
 )
 from younggeul_core.connectors.protocol import Connector, ConnectorResult
 from younggeul_core.connectors.rate_limit import RateLimiter
-from younggeul_core.connectors.retry import ConnectorError, NonRetryableError
+from younggeul_core.connectors.retry import NonRetryableError
 from younggeul_core.state.bronze import BronzeMigration
 
 _FIXED_NOW = datetime(2026, 3, 28, 12, 0, 0, tzinfo=timezone.utc)
@@ -40,7 +37,7 @@ def _make_rate_limiter() -> RateLimiter:
 
 
 def _default_request() -> KostatMigrationRequest:
-    return KostatMigrationRequest(year_month="202301")
+    return KostatMigrationRequest(year_month="202503")
 
 
 def _dataset_ref() -> DatasetRef:
@@ -54,270 +51,199 @@ def _dataset_ref() -> DatasetRef:
 
 
 def _record_batch(items: list[dict[str, object]]) -> RecordBatch:
-    return RecordBatch(
-        items=items,
-        dataset=_dataset_ref(),
-        total_count=len(items),
-        raw=items,
-    )
+    return RecordBatch(items=items, dataset=_dataset_ref(), total_count=len(items), raw=items)
 
 
-def _dataframe_items(df: pd.DataFrame) -> list[dict[str, object]]:
-    return cast(list[dict[str, object]], df.to_dict(orient="records"))
+def _flow_row(
+    *,
+    c1: str,
+    c1_nm: str,
+    c2: str,
+    c2_nm: str,
+    itm_id: str,
+    dt: str,
+    prd_de: str = "202503",
+) -> dict[str, object]:
+    return {
+        "C1": c1,
+        "C1_NM": c1_nm,
+        "C2": c2,
+        "C2_NM": c2_nm,
+        "ITM_ID": itm_id,
+        "ITM_NM": "이동자수" if itm_id == "T70" else "순이동자수",
+        "PRD_DE": prd_de,
+        "DT": dt,
+    }
 
 
-def _sample_long_dataframe() -> pd.DataFrame:
-    """Create a synthetic long-format KOSIS DataFrame.
+def _seoul_full_payload(prd_de: str = "202503") -> list[dict[str, object]]:
+    """Minimal but realistic 2-region (Seoul, Busan) matrix.
 
-    Two regions (Seoul 11, Busan 26), each with 3 metrics (T20, T25, T30).
-    C2="00" marks aggregate/total rows.
+    Includes the four canonical pair types used by the pivot:
+    전국→region (in), region→전국 (out), self-loop (skipped),
+    inter-region (skipped). Both T70 and T80 metrics are present where
+    KOSIS would emit them.
     """
-    rows: list[dict[str, object]] = []
-    regions = [("11", "서울특별시"), ("26", "부산광역시")]
-    metrics = [
-        ("T20", "전입", "150000"),
-        ("T25", "전출", "140000"),
-        ("T30", "순이동", "10000"),
+    return [
+        # Seoul as destination from 전국: in_count=110859, net_count=1306
+        _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울특별시", itm_id="T70", dt="110859", prd_de=prd_de),
+        _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울특별시", itm_id="T80", dt="1306", prd_de=prd_de),
+        # Seoul as origin to 전국: out_count=109553
+        _flow_row(c1="11", c1_nm="서울특별시", c2="00", c2_nm="전국", itm_id="T70", dt="109553", prd_de=prd_de),
+        _flow_row(c1="11", c1_nm="서울특별시", c2="00", c2_nm="전국", itm_id="T80", dt="-1306", prd_de=prd_de),
+        # Busan as destination: in=20000, net=-500
+        _flow_row(c1="00", c1_nm="전국", c2="26", c2_nm="부산광역시", itm_id="T70", dt="20000", prd_de=prd_de),
+        _flow_row(c1="00", c1_nm="전국", c2="26", c2_nm="부산광역시", itm_id="T80", dt="-500", prd_de=prd_de),
+        # Busan as origin: out=20500
+        _flow_row(c1="26", c1_nm="부산광역시", c2="00", c2_nm="전국", itm_id="T70", dt="20500", prd_de=prd_de),
+        # Self-loop Seoul→Seoul: must be ignored
+        _flow_row(c1="11", c1_nm="서울특별시", c2="11", c2_nm="서울특별시", itm_id="T70", dt="67244", prd_de=prd_de),
+        # Inter-region Seoul→Busan: must be ignored
+        _flow_row(c1="11", c1_nm="서울특별시", c2="26", c2_nm="부산광역시", itm_id="T70", dt="3000", prd_de=prd_de),
     ]
-    for code, name in regions:
-        for itm_id, itm_nm, dt in metrics:
-            rows.append(
-                {
-                    "C1": code,
-                    "C1_NM": name,
-                    "C2": "00",
-                    "C2_NM": "합계",
-                    "ITM_ID": itm_id,
-                    "ITM_NM": itm_nm,
-                    "PRD_DE": "202301",
-                    "DT": dt,
-                    "TBL_ID": "DT_1B26003_A01",
-                    "ORG_ID": "101",
-                    "UNIT_NM": "명",
-                }
-            )
-    return pd.DataFrame(rows)
-
-
-def _sample_long_batch() -> RecordBatch:
-    return _record_batch(_dataframe_items(_sample_long_dataframe()))
-
-
-def _sample_with_non_aggregate_rows() -> pd.DataFrame:
-    """DataFrame mixing aggregate (C2='00') and non-aggregate (C2='11') rows."""
-    rows: list[dict[str, object]] = [
-        # Aggregate row — should be kept
-        {
-            "C1": "11",
-            "C1_NM": "서울특별시",
-            "C2": "00",
-            "C2_NM": "합계",
-            "ITM_ID": "T20",
-            "ITM_NM": "전입",
-            "PRD_DE": "202301",
-            "DT": "150000",
-        },
-        # Non-aggregate (origin-destination pair) — should be filtered out
-        {
-            "C1": "11",
-            "C1_NM": "서울특별시",
-            "C2": "11",
-            "C2_NM": "서울특별시",
-            "ITM_ID": "T20",
-            "ITM_NM": "전입",
-            "PRD_DE": "202301",
-            "DT": "50000",
-        },
-    ]
-    return pd.DataFrame(rows)
-
-
-def _sample_with_non_aggregate_batch() -> RecordBatch:
-    return _record_batch(_dataframe_items(_sample_with_non_aggregate_rows()))
-
-
-# ---------------------------------------------------------------------------
-# _safe_str tests
-# ---------------------------------------------------------------------------
 
 
 class TestSafeStr:
-    def test_none_returns_none(self) -> None:
+    def test_none(self) -> None:
         assert _safe_str(None) is None
 
-    def test_nan_returns_none(self) -> None:
+    def test_nan(self) -> None:
         assert _safe_str(float("nan")) is None
 
-    def test_numpy_nan_returns_none(self) -> None:
-        assert _safe_str(np.nan) is None
-
-    def test_string_passthrough(self) -> None:
-        assert _safe_str("150000") == "150000"
-
-    def test_whitespace_stripped(self) -> None:
-        assert _safe_str("  서울  ") == "서울"
-
-    def test_empty_string_returns_none(self) -> None:
+    def test_whitespace(self) -> None:
         assert _safe_str("   ") is None
 
+    def test_strips(self) -> None:
+        assert _safe_str("  hello  ") == "hello"
 
-# ---------------------------------------------------------------------------
-# _filter_aggregate_rows tests
-# ---------------------------------------------------------------------------
-
-
-class TestFilterAggregateRows:
-    def test_keeps_aggregate_rows_only(self) -> None:
-        df = _sample_with_non_aggregate_rows()
-        filtered = _filter_aggregate_rows(df)
-        assert len(filtered) == 1
-        assert filtered.iloc[0]["C2"] == "00"
-
-    def test_empty_sentinel_kept(self) -> None:
-        """Rows with C2='' (empty) are treated as aggregate."""
-        df = pd.DataFrame(
-            {
-                "C1": ["11"],
-                "C1_NM": ["서울특별시"],
-                "C2": [""],
-                "ITM_ID": ["T20"],
-                "PRD_DE": ["202301"],
-                "DT": ["100"],
-            }
-        )
-        filtered = _filter_aggregate_rows(df)
-        assert len(filtered) == 1
-
-    def test_all_sentinel_kept(self) -> None:
-        """Rows with C2='ALL' are treated as aggregate."""
-        df = pd.DataFrame(
-            {
-                "C1": ["11"],
-                "C1_NM": ["서울특별시"],
-                "C2": ["ALL"],
-                "ITM_ID": ["T20"],
-                "PRD_DE": ["202301"],
-                "DT": ["100"],
-            }
-        )
-        filtered = _filter_aggregate_rows(df)
-        assert len(filtered) == 1
-
-    def test_no_c2_column_returns_all(self) -> None:
-        """If table has no C2 dimension, all rows are treated as aggregate."""
-        df = pd.DataFrame(
-            {
-                "C1": ["11", "26"],
-                "C1_NM": ["서울특별시", "부산광역시"],
-                "ITM_ID": ["T20", "T20"],
-                "PRD_DE": ["202301", "202301"],
-                "DT": ["100", "200"],
-            }
-        )
-        filtered = _filter_aggregate_rows(df)
-        assert len(filtered) == 2  # noqa: PLR2004
-
-
-# ---------------------------------------------------------------------------
-# _filter_target_metrics tests
-# ---------------------------------------------------------------------------
+    def test_int(self) -> None:
+        assert _safe_str(42) == "42"
 
 
 class TestFilterTargetMetrics:
-    def test_keeps_target_metrics(self) -> None:
-        df = pd.DataFrame({"ITM_ID": ["T20", "T25", "T30", "T99"]})
-        filtered = _filter_target_metrics(df)
-        assert len(filtered) == 3  # noqa: PLR2004
-        assert set(filtered["ITM_ID"]) == {"T20", "T25", "T30"}
-
-    def test_filters_all_non_target(self) -> None:
-        df = pd.DataFrame({"ITM_ID": ["T99", "T01"]})
-        filtered = _filter_target_metrics(df)
-        assert len(filtered) == 0
-
-
-# ---------------------------------------------------------------------------
-# _pivot_to_region_rows tests
-# ---------------------------------------------------------------------------
+    def test_keeps_t70_and_t80(self) -> None:
+        df = pd.DataFrame(
+            {
+                "ITM_ID": ["T70", "T80", "T75", "X99"],
+                "DT": ["1", "2", "3", "4"],
+            }
+        )
+        out = _filter_target_metrics(df)
+        assert sorted(out["ITM_ID"].tolist()) == ["T70", "T80"]
 
 
 class TestPivotToRegionRows:
-    def test_normal_pivot(self) -> None:
-        """Three long rows per region pivot into one dict per region."""
-        df = _sample_long_dataframe()
-        # Filter to aggregate rows first (all rows in fixture are aggregate)
-        filtered = _filter_aggregate_rows(df)
-        filtered = _filter_target_metrics(filtered)
-        pivoted = _pivot_to_region_rows(filtered)
+    def test_full_payload_collapses_to_per_region(self) -> None:
+        df = pd.DataFrame(_seoul_full_payload())
+        out = _pivot_to_region_rows(df)
 
-        assert len(pivoted) == 2  # noqa: PLR2004
+        by_code = {row["region_code"]: row for row in out}
+        assert set(by_code) == {"11", "26"}
 
-        seoul = pivoted[0]  # "11" sorts before "26"
-        assert seoul["region_code"] == "11"
+        seoul = by_code["11"]
         assert seoul["region_name"] == "서울특별시"
-        assert seoul["year"] == "2023"
-        assert seoul["month"] == "01"
-        assert seoul["in_count"] == "150000"
-        assert seoul["out_count"] == "140000"
-        assert seoul["net_count"] == "10000"
+        assert seoul["year"] == "2025"
+        assert seoul["month"] == "03"
+        assert seoul["in_count"] == "110859"
+        assert seoul["out_count"] == "109553"
+        assert seoul["net_count"] == "1306"
 
-        busan = pivoted[1]
-        assert busan["region_code"] == "26"
-        assert busan["region_name"] == "부산광역시"
+        busan = by_code["26"]
+        assert busan["in_count"] == "20000"
+        assert busan["out_count"] == "20500"
+        assert busan["net_count"] == "-500"
 
-    def test_duplicate_metric_raises_error(self) -> None:
-        """Duplicate T20 for same region+period raises NonRetryableError."""
+    def test_skips_self_loops_and_interregion(self) -> None:
         df = pd.DataFrame(
-            {
-                "C1": ["11", "11"],
-                "C1_NM": ["서울특별시", "서울특별시"],
-                "ITM_ID": ["T20", "T20"],
-                "PRD_DE": ["202301", "202301"],
-                "DT": ["100", "200"],
-            }
+            [
+                _flow_row(c1="11", c1_nm="서울", c2="11", c2_nm="서울", itm_id="T70", dt="999"),
+                _flow_row(c1="11", c1_nm="서울", c2="26", c2_nm="부산", itm_id="T70", dt="999"),
+            ]
         )
-        with pytest.raises(NonRetryableError, match="Duplicate metric T20"):
+        assert _pivot_to_region_rows(df) == []
+
+    def test_partial_row_missing_only_net(self) -> None:
+        df = pd.DataFrame(
+            [
+                _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T70", dt="100"),
+                _flow_row(c1="11", c1_nm="서울", c2="00", c2_nm="전국", itm_id="T70", dt="80"),
+            ]
+        )
+        out = _pivot_to_region_rows(df)
+        assert len(out) == 1
+        assert out[0]["in_count"] == "100"
+        assert out[0]["out_count"] == "80"
+        assert out[0]["net_count"] is None
+
+    def test_duplicate_in_count_raises(self) -> None:
+        df = pd.DataFrame(
+            [
+                _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T70", dt="100"),
+                _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T70", dt="200"),
+            ]
+        )
+        with pytest.raises(NonRetryableError, match="Duplicate in_count"):
             _pivot_to_region_rows(df)
 
-    def test_missing_required_fields_skipped(self) -> None:
-        """Rows with missing region_code or prd_de are silently skipped."""
+    def test_duplicate_out_count_raises(self) -> None:
         df = pd.DataFrame(
-            {
-                "C1": [None, "11"],
-                "C1_NM": [None, "서울특별시"],
-                "ITM_ID": ["T20", "T20"],
-                "PRD_DE": ["202301", "202301"],
-                "DT": ["100", "200"],
-            }
+            [
+                _flow_row(c1="11", c1_nm="서울", c2="00", c2_nm="전국", itm_id="T70", dt="100"),
+                _flow_row(c1="11", c1_nm="서울", c2="00", c2_nm="전국", itm_id="T70", dt="200"),
+            ]
         )
-        pivoted = _pivot_to_region_rows(df)
-        assert len(pivoted) == 1
-        assert pivoted[0]["region_code"] == "11"
+        with pytest.raises(NonRetryableError, match="Duplicate out_count"):
+            _pivot_to_region_rows(df)
 
-    def test_empty_dataframe(self) -> None:
-        df = pd.DataFrame(columns=["C1", "C1_NM", "ITM_ID", "PRD_DE", "DT"])
-        pivoted = _pivot_to_region_rows(df)
-        assert pivoted == []
-
-    def test_deterministic_ordering(self) -> None:
-        """Output is sorted by (region_code, region_name, prd_de)."""
+    def test_duplicate_net_count_raises(self) -> None:
         df = pd.DataFrame(
-            {
-                "C1": ["26", "11"],
-                "C1_NM": ["부산광역시", "서울특별시"],
-                "ITM_ID": ["T20", "T20"],
-                "PRD_DE": ["202301", "202301"],
-                "DT": ["200", "100"],
-            }
+            [
+                _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T80", dt="10"),
+                _flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T80", dt="20"),
+            ]
         )
-        pivoted = _pivot_to_region_rows(df)
-        assert pivoted[0]["region_code"] == "11"
-        assert pivoted[1]["region_code"] == "26"
+        with pytest.raises(NonRetryableError, match="Duplicate net_count"):
+            _pivot_to_region_rows(df)
 
+    def test_deterministic_ordering_by_region_code(self) -> None:
+        rows = _seoul_full_payload()
+        df = pd.DataFrame(list(reversed(rows)))
+        out = _pivot_to_region_rows(df)
+        assert [row["region_code"] for row in out] == ["11", "26"]
 
-# ---------------------------------------------------------------------------
-# KostatMigrationConnector tests
-# ---------------------------------------------------------------------------
+    def test_skips_rows_with_missing_keys(self) -> None:
+        df = pd.DataFrame(
+            [
+                {
+                    "C1": None,
+                    "C1_NM": None,
+                    "C2": "11",
+                    "C2_NM": "서울",
+                    "ITM_ID": "T70",
+                    "PRD_DE": "202503",
+                    "DT": "1",
+                },
+                {
+                    "C1": "00",
+                    "C1_NM": "전국",
+                    "C2": None,
+                    "C2_NM": None,
+                    "ITM_ID": "T70",
+                    "PRD_DE": "202503",
+                    "DT": "1",
+                },
+                {
+                    "C1": "00",
+                    "C1_NM": "전국",
+                    "C2": "11",
+                    "C2_NM": "서울",
+                    "ITM_ID": None,
+                    "PRD_DE": "202503",
+                    "DT": "1",
+                },
+            ]
+        )
+        assert _pivot_to_region_rows(df) == []
 
 
 class TestKostatMigrationConnector:
@@ -334,232 +260,110 @@ class TestKostatMigrationConnector:
         connector, _ = self._make_connector()
         assert isinstance(connector, Connector)
 
-    def test_full_row_mapping(self) -> None:
-        """Map a long-format KOSIS DataFrame to BronzeMigration records."""
+    def test_full_payload_emits_one_record_per_region(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.list.return_value = _sample_long_batch()
+        mock_client.list.return_value = _record_batch(_seoul_full_payload())
 
-        request = _default_request()
-        result = connector.fetch(request)
+        result = connector.fetch(_default_request())
 
         assert isinstance(result, ConnectorResult)
         assert len(result.records) == 2  # noqa: PLR2004
+        seoul = next(r for r in result.records if r.region_code == "11")
+        assert isinstance(seoul, BronzeMigration)
+        assert seoul.region_name == "서울특별시"
+        assert seoul.year == "2025"
+        assert seoul.month == "03"
+        assert seoul.in_count == "110859"
+        assert seoul.out_count == "109553"
+        assert seoul.net_count == "1306"
+        assert seoul.source_id == "kostat_population_migration"
+        assert seoul.ingest_timestamp == _FIXED_NOW
+        assert seoul.raw_response_hash is not None
+        assert len(seoul.raw_response_hash) == 64  # noqa: PLR2004
 
-        # Seoul (sorted first by region_code "11")
-        rec = result.records[0]
-        assert isinstance(rec, BronzeMigration)
-        assert rec.region_code == "11"
-        assert rec.region_name == "서울특별시"
-        assert rec.year == "2023"
-        assert rec.month == "01"
-        assert rec.in_count == "150000"
-        assert rec.out_count == "140000"
-        assert rec.net_count == "10000"
+    def test_calls_client_with_year_month_window(self) -> None:
+        connector, mock_client = self._make_connector()
+        mock_client.list.return_value = _record_batch(_seoul_full_payload())
 
-        # Metadata
-        assert rec.source_id == "kostat_population_migration"
-        assert rec.ingest_timestamp == _FIXED_NOW
-        assert rec.raw_response_hash is not None
-        assert len(rec.raw_response_hash) == 64  # noqa: PLR2004
+        connector.fetch(KostatMigrationRequest(year_month="202503"))
 
-    def test_empty_dataframe_returns_empty_result(self) -> None:
+        mock_client.list.assert_called_once_with(start_date="202503", end_date="202503")
+
+    def test_empty_batch_returns_empty_success(self) -> None:
         connector, mock_client = self._make_connector()
         mock_client.list.return_value = _record_batch([])
 
-        request = _default_request()
-        result = connector.fetch(request)
+        result = connector.fetch(_default_request())
 
         assert result.records == []
         assert result.manifest.response_count == 0
         assert result.manifest.status == "success"
 
-    def test_empty_record_batch_returns_empty_result(self) -> None:
+    def test_no_target_metrics_returns_empty_success(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.list.return_value = _record_batch([])
+        mock_client.list.return_value = _record_batch(
+            [_flow_row(c1="00", c1_nm="전국", c2="11", c2_nm="서울", itm_id="T99", dt="1")]
+        )
 
-        request = _default_request()
-        result = connector.fetch(request)
+        result = connector.fetch(_default_request())
 
         assert result.records == []
-        assert result.manifest.response_count == 0
         assert result.manifest.status == "success"
+
+    def test_missing_required_columns_raises(self) -> None:
+        connector, mock_client = self._make_connector()
+        mock_client.list.return_value = _record_batch([{"C1": "00", "DT": "1"}])
+
+        with pytest.raises(NonRetryableError, match="Missing expected columns"):
+            connector.fetch(_default_request())
 
     def test_api_failure_returns_failed_manifest(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.list.side_effect = ConnectorError("KOSIS timeout")
+        mock_client.list.side_effect = RuntimeError("boom")
 
-        request = _default_request()
-        result = connector.fetch(request)
+        result = connector.fetch(_default_request())
 
         assert result.records == []
         assert result.manifest.status == "failed"
-        assert "KOSIS timeout" in (result.manifest.error_message or "")
+        assert result.manifest.error_message is not None
+        assert "boom" in result.manifest.error_message
 
-    def test_missing_columns_raises_non_retryable(self) -> None:
+    def test_manifest_carries_request_params(self) -> None:
         connector, mock_client = self._make_connector()
-        # DataFrame with only some required columns
-        mock_client.list.return_value = _record_batch([{"C1": "11", "DT": "100"}])
+        mock_client.list.return_value = _record_batch(_seoul_full_payload())
 
-        request = _default_request()
-        with pytest.raises(NonRetryableError, match="Missing expected columns"):
-            connector.fetch(request)
+        result = connector.fetch(KostatMigrationRequest(year_month="202503"))
 
-    def test_manifest_fields_correct(self) -> None:
+        params = cast(dict[str, str], result.manifest.request_params)
+        assert params["year_month"] == "202503"
+        assert params["tbl_id"] == "DT_1B26003_A01"
+        assert params["org_id"] == "101"
+
+    def test_response_hash_is_stable_across_calls(self) -> None:
         connector, mock_client = self._make_connector()
-        mock_client.list.return_value = _sample_long_batch()
+        mock_client.list.return_value = _record_batch(_seoul_full_payload())
+        first = connector.fetch(_default_request())
+        mock_client.list.return_value = _record_batch(_seoul_full_payload())
+        second = connector.fetch(_default_request())
 
-        request = _default_request()
-        result = connector.fetch(request)
-
-        m = result.manifest
-        assert m.source_id == "kostat_population_migration"
-        assert m.api_endpoint == "statisticsParameterData"
-        assert m.request_params == {
-            "org_id": "101",
-            "tbl_id": "DT_1B26003_A01",
-            "year_month": "202301",
-        }
-        assert m.response_count == 2  # noqa: PLR2004
-        assert m.status == "success"
-        assert m.ingested_at == _FIXED_NOW
-
-    def test_rate_limiter_called(self) -> None:
-        mock_limiter = MagicMock(spec=RateLimiter)
-        mock_client = MagicMock(spec=Dataset)
-        mock_client.list.return_value = _sample_long_batch()
-
-        connector = KostatMigrationConnector(
-            client=mock_client,
-            rate_limiter=mock_limiter,
-            now_fn=_fixed_now,
-        )
-        request = _default_request()
-        connector.fetch(request)
-
-        mock_limiter.wait.assert_called_once()
-
-    def test_hash_deterministic_for_same_data(self) -> None:
-        connector, mock_client = self._make_connector()
-        mock_client.list.return_value = _sample_long_batch()
-
-        request = _default_request()
-        r1 = connector.fetch(request)
-
-        mock_client.list.return_value = _sample_long_batch()
-        r2 = connector.fetch(request)
-
-        assert r1.records[0].raw_response_hash == r2.records[0].raw_response_hash
-
-    def test_filtered_to_no_metrics_returns_empty(self) -> None:
-        """DataFrame with valid columns but no target metrics → empty result."""
-        connector, mock_client = self._make_connector()
-        mock_client.list.return_value = _record_batch(
-            [
-                {
-                    "C1": "11",
-                    "C1_NM": "서울특별시",
-                    "C2": "00",
-                    "ITM_ID": "T99",
-                    "ITM_NM": "기타",
-                    "PRD_DE": "202301",
-                    "DT": "100",
-                }
-            ]
-        )
-
-        request = _default_request()
-        result = connector.fetch(request)
-
-        assert result.records == []
-        assert result.manifest.response_count == 0
-        assert result.manifest.status == "success"
-
-    def test_non_aggregate_rows_excluded(self) -> None:
-        """Only aggregate rows (C2='00') are included in the result."""
-        connector, mock_client = self._make_connector()
-        df = _sample_with_non_aggregate_rows()
-        # Add more metrics so we have a complete set for aggregate row
-        extra = pd.DataFrame(
-            [
-                {
-                    "C1": "11",
-                    "C1_NM": "서울특별시",
-                    "C2": "00",
-                    "C2_NM": "합계",
-                    "ITM_ID": "T25",
-                    "ITM_NM": "전출",
-                    "PRD_DE": "202301",
-                    "DT": "140000",
-                },
-                {
-                    "C1": "11",
-                    "C1_NM": "서울특별시",
-                    "C2": "00",
-                    "C2_NM": "합계",
-                    "ITM_ID": "T30",
-                    "ITM_NM": "순이동",
-                    "PRD_DE": "202301",
-                    "DT": "10000",
-                },
-            ]
-        )
-        full_df = pd.concat([df, extra], ignore_index=True)
-        mock_client.list.return_value = _record_batch(_dataframe_items(full_df))
-
-        request = _default_request()
-        result = connector.fetch(request)
-
-        # Only 1 region (Seoul, aggregate only)
-        assert len(result.records) == 1
-        assert result.records[0].in_count == "150000"
-
-
-# ---------------------------------------------------------------------------
-# KostatMigrationRequest tests
-# ---------------------------------------------------------------------------
+        first_hash = first.records[0].raw_response_hash
+        second_hash = second.records[0].raw_response_hash
+        assert first_hash == second_hash
 
 
 class TestKostatMigrationRequest:
-    def test_frozen(self) -> None:
-        req = _default_request()
-        with pytest.raises(AttributeError):
-            setattr(req, "year_month", "202302")
-
-    def test_fields(self) -> None:
-        req = _default_request()
-        assert req.year_month == "202301"
-        assert req.org_id == "101"
-        assert req.tbl_id == "DT_1B26003_A01"
-
     def test_defaults(self) -> None:
-        """Default org_id and tbl_id are set correctly."""
-        req = KostatMigrationRequest(year_month="202312")
+        req = KostatMigrationRequest(year_month="202503")
         assert req.org_id == "101"
         assert req.tbl_id == "DT_1B26003_A01"
 
-    def test_custom_fields(self) -> None:
-        """Custom org_id and tbl_id override defaults."""
-        req = KostatMigrationRequest(
-            year_month="202312",
-            org_id="999",
-            tbl_id="DT_CUSTOM",
-        )
+    def test_overrides(self) -> None:
+        req = KostatMigrationRequest(year_month="202503", org_id="999", tbl_id="DT_X")
         assert req.org_id == "999"
-        assert req.tbl_id == "DT_CUSTOM"
+        assert req.tbl_id == "DT_X"
 
 
-# ---------------------------------------------------------------------------
-# Constants tests
-# ---------------------------------------------------------------------------
-
-
-class TestConstants:
-    def test_required_columns(self) -> None:
-        assert REQUIRED_COLUMNS == frozenset({"C1", "C1_NM", "ITM_ID", "ITM_NM", "PRD_DE", "DT"})
-
-    def test_metric_map(self) -> None:
-        assert METRIC_MAP == {
-            "T20": "in_count",
-            "T25": "out_count",
-            "T30": "net_count",
-        }
+def test_constants_exported() -> None:
+    assert NATIONAL_AGGREGATE_CODE == "00"
+    assert TARGET_ITM_IDS == frozenset({"T70", "T80"})
+    assert REQUIRED_COLUMNS == frozenset({"C1", "C1_NM", "C2", "C2_NM", "ITM_ID", "PRD_DE", "DT"})

@@ -1,12 +1,17 @@
 """Live ingest pipeline: fetches Seoul gu × month(s) from real APIs via kpubdata.
 
-v0.1 scope (option C — see docs/adr/007):
-- MOLIT apartment trades and BOK base rate are fetched live.
-- KOSTAT population migration is **not emitted** in live mode. The kpubdata
-  ``kosis.population_migration`` dataset only exposes ``T70``/``T80`` aggregate
-  metrics while ``BronzeMigration`` requires per-region in/out/net counts;
-  wiring those requires either a different KOSIS table or a Bronze schema
-  change, which is tracked separately.
+Live mode wires three connectors:
+
+* MOLIT apartment trades — once per (gu, month) pair (the API does not
+  accept ranges or multi-sigungu queries).
+* BOK base rate — once for the full month window (rate is national).
+* KOSTAT population migration — once per month at 시도 (province) level via
+  kpubdata's ``kosis.population_migration`` dataset. The aggregator joins on
+  ``gu_code[:2]`` so 시도-level rows populate ``net_migration`` for every
+  Seoul gu without an explicit mapping.
+
+See :doc:`docs/adr/008-kostat-live-activation` for the KOSTAT design and
+:doc:`docs/adr/007-kpubdata-live-ingest` for the broader live-ingest flow.
 """
 
 from __future__ import annotations
@@ -18,6 +23,10 @@ from younggeul_core.connectors.rate_limit import RateLimiter
 from younggeul_app_kr_seoul_apartment.connectors.bok import (
     BokInterestRateConnector,
     BokInterestRateRequest,
+)
+from younggeul_app_kr_seoul_apartment.connectors.kostat import (
+    KostatMigrationConnector,
+    KostatMigrationRequest,
 )
 from younggeul_app_kr_seoul_apartment.connectors.molit import (
     MolitAptConnector,
@@ -98,8 +107,8 @@ def run_live_ingest_gus_months(
     MOLIT is queried once per (gu, month) pair (the API does not accept ranges
     or multiple sigungu codes); BOK is queried once with
     ``start_date=min(deal_yms)`` and ``end_date=max(deal_yms)`` since the base
-    rate is national. KOSTAT migrations are omitted in live mode (see module
-    docstring).
+    rate is national. KOSTAT migrations are queried once per month at 시도
+    level and joined to gus via ``gu_code[:2]`` downstream.
 
     Args:
         client: Authenticated kpubdata client (via ``client_factory.build_client``).
@@ -138,9 +147,11 @@ def run_live_ingest_gus_months(
 
     apt_dataset = client.dataset("datago.apt_trade")
     rate_dataset = client.dataset("bok.base_rate")
+    migration_dataset = client.dataset("kosis.population_migration")
 
     apt_connector = MolitAptConnector(client=apt_dataset, rate_limiter=limiter)
     bok_connector = BokInterestRateConnector(client=rate_dataset, rate_limiter=limiter)
+    migration_connector = KostatMigrationConnector(client=migration_dataset, rate_limiter=limiter)
 
     apt_records = []
     for code in lawd_codes:
@@ -160,10 +171,15 @@ def run_live_ingest_gus_months(
         )
     )
 
+    migration_records = []
+    for ym in deal_yms:
+        migration_result = migration_connector.fetch(KostatMigrationRequest(year_month=ym))
+        migration_records.extend(migration_result.records)
+
     return BronzeInput(
         apt_transactions=apt_records,
         interest_rates=rate_result.records,
-        migrations=[],
+        migrations=migration_records,
     )
 
 

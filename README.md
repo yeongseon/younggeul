@@ -105,7 +105,7 @@ For cross-district analysis, use `--gus` (CSV) instead of `--gu`:
 younggeul ingest --source live --gus 11680,11440 --months 202403,202503 --output-dir ./output/live-multi
 ```
 
-`--month`/`--months` and `--gu`/`--gus` are each mutually exclusive. See [ADR-007](docs/adr/007-kpubdata-live-ingest.md) for the design and current scope (KOSTAT migration is not emitted in live mode for v0.1).
+`--month`/`--months` and `--gu`/`--gus` are each mutually exclusive. Live mode populates MOLIT trades, BOK base rate, **and** KOSTAT 시도-level net migration (joined to each gu via `gu_code[:2]`). See [ADR-007](docs/adr/007-kpubdata-live-ingest.md) for the live ingest design and [ADR-008](docs/adr/008-kostat-live-activation.md) for the KOSTAT activation rationale.
 
 To chain ingest → snapshot publish → baseline against real APIs in one shot:
 
@@ -181,6 +181,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-005](docs/adr/005-evidence-gated-reporting.md) | Three-phase evidence-gated reporting |
 | [ADR-006](docs/adr/006-public-data-policy.md) | No raw data in git; manifests only |
 | [ADR-007](docs/adr/007-kpubdata-live-ingest.md) | Live ingest via kpubdata unified client |
+| [ADR-008](docs/adr/008-kostat-live-activation.md) | Activate KOSTAT migration at 시도 granularity |
 
 ## License
 
