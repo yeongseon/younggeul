@@ -9,6 +9,7 @@ from kpubdata.core.dataset import Dataset
 from younggeul_app_kr_seoul_apartment.pipeline import BronzeInput
 from younggeul_app_kr_seoul_apartment.pipeline_live import (
     run_live_ingest,
+    run_live_ingest_gus_months,
     run_live_ingest_months,
 )
 from younggeul_core.connectors.protocol import ConnectorResult
@@ -191,3 +192,53 @@ def test_run_live_ingest_months_rejects_duplicates() -> None:
 def test_run_live_ingest_months_rejects_invalid_member() -> None:
     with pytest.raises(ValueError, match="deal_ym must be YYYYMM"):
         run_live_ingest_months(client=MagicMock(), lawd_code="11680", deal_yms=["202503", "20250"])
+
+
+def test_run_live_ingest_gus_months_fetches_cartesian_product(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from younggeul_app_kr_seoul_apartment import pipeline_live
+    from younggeul_app_kr_seoul_apartment.connectors.molit import MolitAptRequest
+
+    apt_mock = MagicMock()
+    rate_mock = MagicMock()
+    apt_mock.return_value.fetch.return_value = ConnectorResult(records=[_apt_record()], manifest=MagicMock())
+    rate_mock.return_value.fetch.return_value = ConnectorResult(records=[_rate_record()], manifest=MagicMock())
+    monkeypatch.setattr(pipeline_live, "MolitAptConnector", apt_mock)
+    monkeypatch.setattr(pipeline_live, "BokInterestRateConnector", rate_mock)
+
+    client = MagicMock()
+    client.dataset.side_effect = lambda _id: MagicMock(spec=Dataset)
+
+    bronze = run_live_ingest_gus_months(client=client, lawd_codes=["11680", "11440"], deal_yms=["202403", "202503"])
+
+    apt_calls = apt_mock.return_value.fetch.call_args_list
+    assert len(apt_calls) == 4
+    pairs = [(call.args[0].sigungu_code, call.args[0].year_month) for call in apt_calls]
+    assert pairs == [
+        ("11680", "202403"),
+        ("11680", "202503"),
+        ("11440", "202403"),
+        ("11440", "202503"),
+    ]
+    for call in apt_calls:
+        assert isinstance(call.args[0], MolitAptRequest)
+
+    assert rate_mock.return_value.fetch.call_count == 1
+    assert isinstance(bronze, BronzeInput)
+    assert len(bronze.apt_transactions) == 4
+
+
+def test_run_live_ingest_gus_months_rejects_empty_lawd_codes() -> None:
+    with pytest.raises(ValueError, match="lawd_codes must not be empty"):
+        run_live_ingest_gus_months(client=MagicMock(), lawd_codes=[], deal_yms=["202503"])
+
+
+def test_run_live_ingest_gus_months_rejects_duplicate_lawd_codes() -> None:
+    with pytest.raises(ValueError, match="lawd_codes must not contain duplicates"):
+        run_live_ingest_gus_months(client=MagicMock(), lawd_codes=["11680", "11680"], deal_yms=["202503"])
+
+
+def test_run_live_ingest_gus_months_rejects_invalid_lawd_code() -> None:
+    with pytest.raises(ValueError, match="lawd_code must be 5 digits"):
+        run_live_ingest_gus_months(client=MagicMock(), lawd_codes=["11680", "1168"], deal_yms=["202503"])

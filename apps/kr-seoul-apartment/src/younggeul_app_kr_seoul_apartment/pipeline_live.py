@@ -75,30 +75,58 @@ def run_live_ingest_months(
 ) -> BronzeInput:
     """Fetch MOLIT and BOK data for one gu × N months and return a BronzeInput.
 
-    MOLIT is queried once per month (the API does not accept a range); BOK is
-    queried with ``start_date=min(deal_yms)`` and ``end_date=max(deal_yms)``
-    so a single request covers the whole window. KOSTAT migrations are omitted
-    in live mode (see module docstring).
+    Thin wrapper over :func:`run_live_ingest_gus_months` for the single-gu case.
+    See that function for full semantics.
+    """
+    return run_live_ingest_gus_months(
+        client=client,
+        lawd_codes=[lawd_code],
+        deal_yms=deal_yms,
+        rate_limit_interval=rate_limit_interval,
+    )
+
+
+def run_live_ingest_gus_months(
+    *,
+    client: Client,
+    lawd_codes: list[str],
+    deal_yms: list[str],
+    rate_limit_interval: float = _DEFAULT_RATE_LIMIT_INTERVAL,
+) -> BronzeInput:
+    """Fetch MOLIT and BOK data for M gus × N months and return a BronzeInput.
+
+    MOLIT is queried once per (gu, month) pair (the API does not accept ranges
+    or multiple sigungu codes); BOK is queried once with
+    ``start_date=min(deal_yms)`` and ``end_date=max(deal_yms)`` since the base
+    rate is national. KOSTAT migrations are omitted in live mode (see module
+    docstring).
 
     Args:
-        client: Authenticated kpubdata client (built via ``client_factory.build_client``).
-        lawd_code: 5-digit MOLIT sigungu code (e.g. ``"11680"`` for Gangnam-gu).
+        client: Authenticated kpubdata client (via ``client_factory.build_client``).
+        lawd_codes: One or more 5-digit MOLIT sigungu codes. Order is preserved
+            in the output. Duplicates are rejected.
         deal_yms: One or more target months in ``YYYYMM`` format. Order is
-            preserved in the output. Duplicates are rejected.
+            preserved. Duplicates are rejected.
         rate_limit_interval: Minimum seconds between consecutive API calls per
             connector. Defaults to 1.0 to stay well within data.go.kr quotas.
 
     Returns:
-        ``BronzeInput`` populated with apt transactions across all requested
-        months and interest rates spanning the full window, ready for
-        ``run_pipeline``. With multiple months, downstream Gold output will
-        include YoY/MoM change ratios where comparison anchors are available.
+        ``BronzeInput`` with apt transactions across all (gu × month) pairs and
+        interest rates spanning the full window. The aggregator groups by
+        ``(gu_code, period)`` so each (gu, month) becomes its own Gold row,
+        with YoY/MoM ratios populated where comparison anchors exist within
+        the same gu.
 
     Raises:
-        ValueError: If ``lawd_code`` or any ``deal_ym`` is malformed, if
-            ``deal_yms`` is empty, or if it contains duplicates.
+        ValueError: If any code is malformed, lists are empty, or duplicates
+            are present.
     """
-    _validate_lawd_code(lawd_code)
+    if not lawd_codes:
+        raise ValueError("lawd_codes must not be empty")
+    if len(set(lawd_codes)) != len(lawd_codes):
+        raise ValueError(f"lawd_codes must not contain duplicates, got {lawd_codes!r}")
+    for code in lawd_codes:
+        _validate_lawd_code(code)
     if not deal_yms:
         raise ValueError("deal_yms must not be empty")
     if len(set(deal_yms)) != len(deal_yms):
@@ -115,9 +143,10 @@ def run_live_ingest_months(
     bok_connector = BokInterestRateConnector(client=rate_dataset, rate_limiter=limiter)
 
     apt_records = []
-    for ym in deal_yms:
-        apt_result = apt_connector.fetch(MolitAptRequest(sigungu_code=lawd_code, year_month=ym))
-        apt_records.extend(apt_result.records)
+    for code in lawd_codes:
+        for ym in deal_yms:
+            apt_result = apt_connector.fetch(MolitAptRequest(sigungu_code=code, year_month=ym))
+            apt_records.extend(apt_result.records)
 
     rate_result = bok_connector.fetch(
         BokInterestRateRequest(
@@ -138,4 +167,4 @@ def run_live_ingest_months(
     )
 
 
-__all__ = ["run_live_ingest", "run_live_ingest_months"]
+__all__ = ["run_live_ingest", "run_live_ingest_gus_months", "run_live_ingest_months"]

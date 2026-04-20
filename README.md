@@ -95,7 +95,13 @@ younggeul ingest --source live --gu 11680 --month 202503 --output-dir ./output/l
 younggeul ingest --source live --gu 11680 --months 202403,202503 --output-dir ./output/live-yoy
 ```
 
-`--month` and `--months` are mutually exclusive. v0.1 covers one gu per invocation. See [ADR-007](docs/adr/007-kpubdata-live-ingest.md) for the design and current scope (KOSTAT migration is not emitted in live mode for v0.1).
+For cross-district analysis, use `--gus` (CSV) instead of `--gu`:
+
+```bash
+younggeul ingest --source live --gus 11680,11440 --months 202403,202503 --output-dir ./output/live-multi
+```
+
+`--month`/`--months` and `--gu`/`--gus` are each mutually exclusive. See [ADR-007](docs/adr/007-kpubdata-live-ingest.md) for the design and current scope (KOSTAT migration is not emitted in live mode for v0.1).
 
 ## v0.1 Scope
 
