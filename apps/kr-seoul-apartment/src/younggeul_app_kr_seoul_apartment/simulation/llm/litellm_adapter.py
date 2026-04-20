@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import time
 from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
@@ -28,6 +29,7 @@ _KNOWN_PROVIDERS: frozenset[str] = frozenset(
         "azure",
         "bedrock",
         "deepseek",
+        "github",
         "openrouter",
         "replicate",
         "sagemaker",
@@ -35,6 +37,9 @@ _KNOWN_PROVIDERS: frozenset[str] = frozenset(
         "vertex_ai",
     }
 )
+
+_GITHUB_MODELS_PREFIX = "github/"
+_GITHUB_MODELS_API_BASE = "https://models.github.ai/inference"
 
 
 def _normalize_provider(model: str) -> str:
@@ -100,6 +105,40 @@ def _set_error_status(span: _SpanLike, exc: Exception) -> None:
         pass
 
 
+def _is_github_models_model(model: str) -> bool:
+    return model.lower().startswith(_GITHUB_MODELS_PREFIX)
+
+
+def _bridge_github_models_token() -> str | None:
+    token = os.getenv("GH_MODELS_TOKEN") or os.getenv("GITHUB_TOKEN")
+    if token and not os.getenv("GITHUB_TOKEN"):
+        os.environ["GITHUB_TOKEN"] = token
+    return token
+
+
+def _resolve_completion_kwargs(model: str, default_kwargs: dict[str, Any]) -> dict[str, Any]:
+    completion_kwargs = dict(default_kwargs)
+    completion_kwargs["model"] = model
+
+    if not _is_github_models_model(model):
+        return completion_kwargs
+
+    token = _bridge_github_models_token()
+    if token is None:
+        msg = "GitHub Models requires GH_MODELS_TOKEN or GITHUB_TOKEN"
+        raise StructuredLLMTransportError(msg)
+
+    completion_kwargs.update(
+        {
+            "model": model[len(_GITHUB_MODELS_PREFIX) :],
+            "custom_llm_provider": "openai",
+            "api_base": _GITHUB_MODELS_API_BASE,
+            "api_key": token,
+        }
+    )
+    return completion_kwargs
+
+
 class StructuredLLMTransportError(RuntimeError):
     """Raised when transport-level LLM invocation fails."""
 
@@ -155,15 +194,15 @@ class LiteLLMStructuredLLM:
         provider = _normalize_provider(self.model)
         request_metric_attrs = metric_attrs(provider=provider, model=self.model)
         start = time.monotonic()
+        completion_kwargs = _resolve_completion_kwargs(self.model, self._default_kwargs)
 
         with _make_span_ctx("llm.completion", attributes=span_attrs) as span:
             try:
                 response = litellm.completion(
-                    model=self.model,
                     messages=list(messages),
                     temperature=temperature,
                     response_format=response_format,
-                    **self._default_kwargs,
+                    **completion_kwargs,
                 )
             except Exception as exc:
                 elapsed_ms = (time.monotonic() - start) * 1000

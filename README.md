@@ -67,6 +67,8 @@ younggeul report --report-file ./output/simulation/simulation_report_*.md
 younggeul eval --output-dir ./eval_results
 ```
 
+Simulation runs can also target GitHub Models by setting `GH_MODELS_TOKEN` (or reusing `GITHUB_TOKEN`) and passing a GitHub Models id such as `--model-id github/openai/gpt-4o-mini`. See [ADR-009](docs/adr/009-github-models-llm.md) for the routing and migration details.
+
 ## Data Sources
 
 | Source | Provider | Data |
@@ -182,6 +184,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-006](docs/adr/006-public-data-policy.md) | No raw data in git; manifests only |
 | [ADR-007](docs/adr/007-kpubdata-live-ingest.md) | Live ingest via kpubdata unified client |
 | [ADR-008](docs/adr/008-kostat-live-activation.md) | Activate KOSTAT migration at 시도 granularity |
+| [ADR-009](docs/adr/009-github-models-llm.md) | GitHub Models support for simulation LLM routing |
 
 ## License
 
