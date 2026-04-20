@@ -116,6 +116,8 @@ set -a; source .env; set +a   # load KPUBDATA_* keys
 make demo-live                # or: GU=11680 MONTHS=202403,202503 bash scripts/demo_live.sh
 ```
 
+GitHub Actions can also run the live ingest on a schedule or via manual dispatch through `.github/workflows/data-pipeline.yml`. The workflow defaults to Gangnam (`11680`) and the last completed UTC month, and its operational rationale is documented in [ADR-010](docs/adr/010-data-pipeline-live-workflow.md).
+
 ## v0.1 Scope
 
 - **Region**: Seoul apartments only (서울 아파트 매매)
@@ -185,6 +187,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-007](docs/adr/007-kpubdata-live-ingest.md) | Live ingest via kpubdata unified client |
 | [ADR-008](docs/adr/008-kostat-live-activation.md) | Activate KOSTAT migration at 시도 granularity |
 | [ADR-009](docs/adr/009-github-models-llm.md) | GitHub Models support for simulation LLM routing |
+| [ADR-010](docs/adr/010-data-pipeline-live-workflow.md) | Real live ingest wiring for the GitHub Actions data pipeline |
 
 ## License
 

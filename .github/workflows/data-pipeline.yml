@@ -1,4 +1,5 @@
 name: Data Pipeline
+
 on:
   schedule:
     - cron: "0 6 * * 0" # Sunday 6 AM UTC
@@ -6,39 +7,117 @@ on:
     inputs:
       source:
         description: "Data source to ingest"
-        default: "molit_apt_trade"
-      start_month:
-        description: "Start month (YYYY-MM)"
+        type: choice
+        options:
+          - fixture
+          - live
+        default: live
+      gus:
+        description: "Comma-separated 5-digit MOLIT sigungu codes"
         required: false
-      end_month:
-        description: "End month (YYYY-MM)"
+        default: "11680"
+      months:
+        description: "Comma-separated YYYYMM months (empty = last completed UTC month)"
         required: false
+        default: ""
+      output_dir:
+        description: "Output directory for ingest artifacts"
+        required: false
+        default: "output/pipeline"
+
+permissions:
+  contents: read
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
-      DATA_GO_KR_API_KEY: ${{ secrets.DATA_GO_KR_API_KEY }}
+      KPUBDATA_DATAGO_API_KEY: ${{ secrets.KPUBDATA_DATAGO_API_KEY }}
+      KPUBDATA_BOK_API_KEY: ${{ secrets.KPUBDATA_BOK_API_KEY }}
+      KPUBDATA_KOSIS_API_KEY: ${{ secrets.KPUBDATA_KOSIS_API_KEY }}
     steps:
       - uses: actions/checkout@v6
+
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
       - uses: astral-sh/setup-uv@v7
+
       - name: Install dependencies
         run: uv pip install --system -e ".[dev]"
-      - name: Check API key
+
+      - name: Resolve ingest parameters
+        id: params
+        env:
+          INPUT_SOURCE: ${{ inputs.source || '' }}
+          INPUT_GUS: ${{ inputs.gus || '' }}
+          INPUT_MONTHS: ${{ inputs.months || '' }}
+          INPUT_OUTPUT_DIR: ${{ inputs.output_dir || '' }}
         run: |
-          if [ -z "$DATA_GO_KR_API_KEY" ]; then
-            echo "::warning::DATA_GO_KR_API_KEY not set. Skipping ingestion."
-            exit 0
+          last_completed_month="$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y%m)"
+
+          if [ "${{ github.event_name }}" = "schedule" ]; then
+            source="live"
+            gus="11680"
+            months="$last_completed_month"
+            output_dir="output/pipeline"
+          else
+            source="${INPUT_SOURCE:-live}"
+            gus="${INPUT_GUS:-11680}"
+            months="${INPUT_MONTHS:-$last_completed_month}"
+            output_dir="${INPUT_OUTPUT_DIR:-output/pipeline}"
           fi
-      - name: Run collector
-        run: 'echo "TODO: python -m younggeul_app_kr_seoul_apartment.pipeline.collector"'
-      - name: Upload manifest
+
+          {
+            echo "source=$source"
+            echo "gus=$gus"
+            echo "months=$months"
+            echo "output_dir=$output_dir"
+            echo "last_completed_month=$last_completed_month"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Validate live ingest configuration
+        if: ${{ steps.params.outputs.source == 'live' }}
+        run: |
+          missing=0
+
+          for var_name in KPUBDATA_DATAGO_API_KEY KPUBDATA_BOK_API_KEY KPUBDATA_KOSIS_API_KEY; do
+            if [ -z "${!var_name}" ]; then
+              echo "::error::$var_name is required when running younggeul ingest --source live"
+              missing=1
+            fi
+          done
+
+          if [ -z "${{ steps.params.outputs.gus }}" ]; then
+            echo "::error::At least one gu code is required when running live ingest"
+            missing=1
+          fi
+
+          if [ -z "${{ steps.params.outputs.months }}" ]; then
+            echo "::error::At least one YYYYMM month is required when running live ingest"
+            missing=1
+          fi
+
+          if [ "$missing" -ne 0 ]; then
+            exit 1
+          fi
+
+      - name: Run ingest
+        run: >-
+          younggeul ingest
+          --source "${{ steps.params.outputs.source }}"
+          --gus "${{ steps.params.outputs.gus }}"
+          --months "${{ steps.params.outputs.months }}"
+          --output-dir "${{ steps.params.outputs.output_dir }}"
+
+      - name: Upload ingest artifacts
         uses: actions/upload-artifact@v7
         if: always()
         with:
-          name: ingest-manifest
-          path: data/bronze/**/manifest.json
-          if-no-files-found: ignore
+          name: ingest-output
+          path: |
+            ${{ steps.params.outputs.output_dir }}/**/*.jsonl
+            ${{ steps.params.outputs.output_dir }}/**/manifest.json
+          if-no-files-found: warn
