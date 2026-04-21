@@ -188,6 +188,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-008](docs/adr/008-kostat-live-activation.md) | Activate KOSTAT migration at 시도 granularity |
 | [ADR-009](docs/adr/009-github-models-llm.md) | GitHub Models support for simulation LLM routing |
 | [ADR-010](docs/adr/010-data-pipeline-live-workflow.md) | Real live ingest wiring for the GitHub Actions data pipeline |
+| [ADR-011](docs/adr/011-simulate-live-snapshot-wiring.md) | Wire live snapshot data into the simulate CLI |
 
 ## License
 
