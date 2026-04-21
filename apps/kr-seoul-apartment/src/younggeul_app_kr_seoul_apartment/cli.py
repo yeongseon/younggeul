@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -15,7 +16,8 @@ from pydantic import ValidationError
 
 from younggeul_core.state.bronze import BronzeAptTransaction, BronzeInterestRate, BronzeMigration
 from younggeul_core.state.gold import GoldDistrictMonthlyMetrics
-from younggeul_core.state.simulation import SnapshotRef
+from younggeul_core.state.simulation import ScenarioSpec, SnapshotRef
+from younggeul_core.storage.snapshot import SnapshotManifest
 
 from .forecaster import forecast_baseline, generate_baseline_report
 from .pipeline import BronzeInput, run_pipeline
@@ -24,6 +26,7 @@ from .simulation.event_store import InMemoryEventStore
 from .simulation.evidence.store import InMemoryEvidenceStore
 from .simulation.graph import build_simulation_graph
 from .simulation.graph_state import seed_graph_state
+from .simulation.adapters.filesystem_snapshot_reader import FilesystemSnapshotReader
 from .simulation.metrics import init_metrics, shutdown_metrics
 from .simulation.schemas.report import RenderedReport
 from .simulation.tracing import init_tracing, shutdown_tracing
@@ -172,6 +175,83 @@ def _snapshot_ref_from_manifest(manifest: Any) -> SnapshotRef:
         created_at=manifest.created_at,
         table_count=len(manifest.table_entries),
     )
+
+
+_SNAPSHOT_DIR_NAME_RE = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _add_months(year: int, month: int, months: int) -> date:
+    total_month = (year * 12) + (month - 1) + months
+    return date(total_month // 12, (total_month % 12) + 1, 1)
+
+
+def _parse_period_start(period: str) -> date:
+    year_str, month_str = period.split("-", maxsplit=1)
+    return date(int(year_str), int(month_str), 1)
+
+
+def _parse_gus_csv(gus: str) -> list[str]:
+    target_gus = [gu.strip() for gu in gus.split(",") if gu.strip()]
+    if not target_gus:
+        raise click.ClickException("--gus must include at least one gu code")
+    return target_gus
+
+
+def _resolve_single_snapshot_manifest(snapshot_dir: Path) -> SnapshotManifest:
+    snapshot_candidates = [
+        candidate
+        for candidate in sorted(snapshot_dir.iterdir(), key=lambda item: item.name)
+        if candidate.is_dir() and _SNAPSHOT_DIR_NAME_RE.fullmatch(candidate.name)
+    ]
+    if not snapshot_candidates:
+        raise click.ClickException(f"No snapshot subdirectories found in {snapshot_dir}")
+    if len(snapshot_candidates) > 1:
+        raise click.ClickException(
+            f"Multiple snapshots found in {snapshot_dir}; please leave only one snapshot directory for simulate"
+        )
+
+    manifest_path = snapshot_candidates[0] / "manifest.json"
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except FileNotFoundError as exc:
+        raise click.ClickException(f"Snapshot manifest not found: {manifest_path}") from exc
+    except (json.JSONDecodeError, OSError) as exc:
+        raise click.ClickException(f"Invalid manifest JSON at {manifest_path}") from exc
+
+    try:
+        return SnapshotManifest.model_validate(payload)
+    except ValidationError as exc:
+        raise click.ClickException(f"Invalid manifest schema at {manifest_path}") from exc
+
+
+def _build_cli_live_roster() -> dict[str, Any]:
+    return {
+        "seed": "cli-live",
+        "buckets": [
+            {
+                "role": "buyer",
+                "count": 1,
+                "capital_min_multiplier": 1.0,
+                "capital_max_multiplier": 1.2,
+                "holdings_min": 0,
+                "holdings_max": 0,
+                "risk_min": 0.5,
+                "risk_max": 0.5,
+                "sentiment_bias": "neutral",
+            },
+            {
+                "role": "investor",
+                "count": 1,
+                "capital_min_multiplier": 0.0,
+                "capital_max_multiplier": 0.0,
+                "holdings_min": 1,
+                "holdings_max": 1,
+                "risk_min": 0.5,
+                "risk_max": 0.5,
+                "sentiment_bias": "neutral",
+            },
+        ],
+    }
 
 
 def _extract_rendered_report(
@@ -490,6 +570,17 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
 @click.option("--model-id", type=str, default="stub", show_default=True)
 @click.option("--run-name", type=str, default="cli-run", show_default=True)
 @click.option(
+    "--snapshot-dir",
+    type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
+    default=None,
+)
+@click.option(
+    "--baseline-dir",
+    type=click.Path(path_type=Path, exists=True, file_okay=False, dir_okay=True),
+    default=None,
+)
+@click.option("--gus", type=str, default=None)
+@click.option(
     "--output-dir",
     type=click.Path(path_type=Path, file_okay=False, dir_okay=True),
     default=Path("./output/simulation"),
@@ -502,18 +593,60 @@ def simulate_command(
     max_rounds: int,
     model_id: str,
     run_name: str,
+    snapshot_dir: Path | None,
+    baseline_dir: Path | None,
+    gus: str | None,
     output_dir: Path,
 ) -> None:
     """Run the simulation graph and save a rendered Markdown report."""
     try:
         validate_max_rounds(max_rounds)
         validate_model_id(model_id)
+        if gus is not None and snapshot_dir is None:
+            raise click.ClickException("--gus requires --snapshot-dir")
+        if baseline_dir is not None and snapshot_dir is None:
+            raise click.ClickException("--baseline-dir requires --snapshot-dir")
+
         event_store = InMemoryEventStore()
         evidence_store = InMemoryEvidenceStore()
-        graph = build_simulation_graph(event_store, evidence_store=evidence_store)
 
         run_id = str(uuid4())
-        initial_state = seed_graph_state(query, run_id=run_id, run_name=run_name, model_id=model_id)
+        if snapshot_dir is None:
+            graph = build_simulation_graph(event_store, evidence_store=evidence_store)
+            initial_state = seed_graph_state(query, run_id=run_id, run_name=run_name, model_id=model_id)
+        else:
+            manifest = _resolve_single_snapshot_manifest(snapshot_dir)
+            snapshot_ref = _snapshot_ref_from_manifest(manifest)
+            snapshot_reader = FilesystemSnapshotReader(snapshot_dir, baseline_dir)
+            coverage = snapshot_reader.get_coverage(snapshot_ref)
+
+            target_gus = _parse_gus_csv(gus) if gus is not None else coverage.available_gu_codes
+            latest_period = _parse_period_start(coverage.max_period)
+            target_period_start = _add_months(latest_period.year, latest_period.month, 1)
+            target_period_end = _add_months(latest_period.year, latest_period.month, max(1, max_rounds))
+            scenario = ScenarioSpec(
+                scenario_name="cli-live",
+                target_gus=target_gus,
+                target_period_start=target_period_start,
+                target_period_end=target_period_end,
+                shocks=[],
+            )
+            participant_roster = _build_cli_live_roster()
+            graph = build_simulation_graph(
+                event_store,
+                evidence_store=evidence_store,
+                snapshot_reader=snapshot_reader,
+            )
+            initial_state = seed_graph_state(
+                query,
+                run_id=run_id,
+                run_name=run_name,
+                model_id=model_id,
+                snapshot=snapshot_ref,
+                scenario=scenario,
+                participant_roster=participant_roster,
+            )
+
         initial_state["max_rounds"] = max_rounds
         final_state = graph.invoke(initial_state)
 

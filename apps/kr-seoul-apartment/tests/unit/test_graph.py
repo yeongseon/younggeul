@@ -125,6 +125,17 @@ def test_intake_planner_stub_sets_intake_plan() -> None:
     assert final["intake_plan"]["planner_status"] == "stub"
 
 
+def test_intake_planner_stub_preserves_seeded_intake_plan() -> None:
+    store = InMemoryEventStore()
+    graph = build_simulation_graph(store)
+    seed = _make_seed("run-intake-seeded", max_rounds=0)
+    seed["intake_plan"] = {"query": "seeded", "planner_status": "seeded"}
+
+    final = graph.invoke(seed)
+
+    assert final["intake_plan"] == {"query": "seeded", "planner_status": "seeded"}
+
+
 def test_scenario_builder_stub_sets_scenario() -> None:
     store = InMemoryEventStore()
     graph = build_simulation_graph(store)
@@ -136,6 +147,24 @@ def test_scenario_builder_stub_sets_scenario() -> None:
     assert scenario.target_gus == ["11680"]
     assert scenario.target_period_start.isoformat() == "2026-01-01"
     assert scenario.target_period_end.isoformat() == "2026-12-31"
+
+
+def test_scenario_builder_stub_preserves_seeded_scenario() -> None:
+    store = InMemoryEventStore()
+    graph = build_simulation_graph(store)
+    seed = _make_seed("run-scenario-seeded", max_rounds=0)
+    seed["scenario"] = ScenarioSpec(
+        scenario_name="Seeded Scenario",
+        target_gus=["11440"],
+        target_period_start=graph_module.date(2025, 4, 1),
+        target_period_end=graph_module.date(2025, 5, 1),
+        shocks=[],
+    )
+
+    final = graph.invoke(seed)
+
+    assert final["scenario"].scenario_name == "Seeded Scenario"
+    assert final["scenario"].target_gus == ["11440"]
 
 
 def test_world_initializer_stub_sets_world_and_participants() -> None:

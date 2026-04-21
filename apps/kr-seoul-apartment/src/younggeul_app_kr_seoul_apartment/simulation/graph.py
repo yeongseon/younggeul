@@ -182,6 +182,10 @@ def _append_event(
 def _make_intake_planner_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         event_id = _append_event(event_store, state, "INTAKE_PLANNED")
+        intake_plan = state.get("intake_plan")
+        if intake_plan is not None:
+            return {"intake_plan": intake_plan, "event_refs": [event_id]}
+
         user_query = state.get("user_query", "")
         return {
             "intake_plan": {
@@ -197,6 +201,10 @@ def _make_intake_planner_stub(event_store: EventStore) -> Any:
 def _make_scenario_builder_stub(event_store: EventStore) -> Any:
     def node(state: SimulationGraphState) -> dict[str, Any]:
         event_id = _append_event(event_store, state, "SCENARIO_BUILT")
+        scenario = state.get("scenario")
+        if scenario is not None:
+            return {"scenario": scenario, "event_refs": [event_id]}
+
         return {
             "scenario": ScenarioSpec(
                 scenario_name="Stub Scenario",

@@ -78,7 +78,15 @@ _REQUIRED_INITIALIZED_KEYS = {
 }
 
 
-def seed_graph_state(user_query: str, run_id: str, run_name: str, model_id: str) -> SimulationGraphState:
+def seed_graph_state(
+    user_query: str,
+    run_id: str,
+    run_name: str,
+    model_id: str,
+    snapshot: SnapshotRef | None = None,
+    scenario: ScenarioSpec | None = None,
+    participant_roster: dict[str, Any] | None = None,
+) -> SimulationGraphState:
     """Create an initial graph state for a simulation run.
 
     Args:
@@ -86,11 +94,14 @@ def seed_graph_state(user_query: str, run_id: str, run_name: str, model_id: str)
         run_id: Stable run identifier.
         run_name: Human-readable run name.
         model_id: Model identifier used for the run.
+        snapshot: Optional preselected snapshot reference.
+        scenario: Optional preseeded scenario specification.
+        participant_roster: Optional preseeded participant roster payload.
 
     Returns:
         Seed graph state with run metadata and empty accumulators.
     """
-    return {
+    state: SimulationGraphState = {
         "user_query": user_query,
         "run_meta": RunMeta(
             run_id=run_id,
@@ -103,6 +114,15 @@ def seed_graph_state(user_query: str, run_id: str, run_name: str, model_id: str)
         "report_claims": [],
         "warnings": [],
     }
+
+    if snapshot is not None:
+        state["snapshot"] = snapshot
+    if scenario is not None:
+        state["scenario"] = scenario
+    if participant_roster is not None:
+        state["participant_roster"] = participant_roster
+
+    return state
 
 
 def to_simulation_state(graph_state: SimulationGraphState) -> SimulationState:
