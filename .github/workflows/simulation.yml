@@ -28,7 +28,7 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v7
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e ".[dev,kr-seoul-apartment]"
       - name: Check GitHub Models token
         run: |
           if [ -z "$GH_MODELS_TOKEN" ]; then

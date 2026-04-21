@@ -46,7 +46,7 @@ jobs:
       - uses: astral-sh/setup-uv@v7
 
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+        run: uv pip install --system -e ".[dev,kr-seoul-apartment]"
 
       - name: Resolve ingest parameters
         id: params
