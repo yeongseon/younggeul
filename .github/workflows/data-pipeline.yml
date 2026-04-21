@@ -11,7 +11,7 @@ on:
         options:
           - fixture
           - live
-        default: live
+        default: fixture
       gus:
         description: "Comma-separated 5-digit MOLIT sigungu codes"
         required: false
@@ -58,13 +58,17 @@ jobs:
         run: |
           last_completed_month="$(date -u -d "$(date -u +%Y-%m-01) -1 month" +%Y%m)"
 
+          # NOTE: GitHub Actions runner IPs are blocked by data.go.kr (MOLIT
+          # RTMS) as of 2026-04. Live ingest is supported for local/cron
+          # invocations off-platform; CI defaults to fixture so the scheduled
+          # pipeline still exercises the end-to-end path. See ADR-010.
           if [ "${{ github.event_name }}" = "schedule" ]; then
-            source="live"
+            source="fixture"
             gus="11680"
             months="$last_completed_month"
             output_dir="output/pipeline"
           else
-            source="${INPUT_SOURCE:-live}"
+            source="${INPUT_SOURCE:-fixture}"
             gus="${INPUT_GUS:-11680}"
             months="${INPUT_MONTHS:-$last_completed_month}"
             output_dir="${INPUT_OUTPUT_DIR:-output/pipeline}"

@@ -141,3 +141,24 @@ If ingest fails before JSONL output is written, artifact upload emits a warning 
 - [ADR-007: Live Ingest via kpubdata](007-kpubdata-live-ingest.md)
 - [ADR-008: Activate KOSTAT Migration in Live Ingest at 시도 Granularity](008-kostat-live-activation.md)
 - `.github/workflows/data-pipeline.yml`
+
+## Addendum (2026-04-21): GitHub Actions IP block on data.go.kr
+
+Empirical testing via a temporary diagnostic workflow (PR #229) confirmed that
+GitHub-hosted runner egress IPs are blocked by data.go.kr (MOLIT RTMS) with an
+HTTP 400 `Request Blocked` HTML response. KOSIS and BOK endpoints remained
+reachable; only the MOLIT API path is affected. API keys and client code were
+verified to work from local environments.
+
+Mitigations adopted:
+
+- The scheduled cron and `workflow_dispatch` defaults switch from `live` to
+  `fixture`. Live ingest is now positioned as a local/off-platform operation.
+- The diagnostic workflow has been removed now that the cause is documented.
+- Operators who need scheduled live ingest must run it from infrastructure
+  outside GitHub-hosted runners (e.g. a local cron or a self-hosted runner on
+  a non-blocked network). Self-hosted runners on this public repository are
+  not recommended without isolating untrusted PR execution.
+
+The CLI itself is unchanged; only the workflow defaults and operational
+guidance are revised.
