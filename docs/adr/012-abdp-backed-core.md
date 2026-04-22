@@ -99,6 +99,31 @@ Until then, the stance is: **C now, A later if earned.**
 | M9 | #244 | Prototype `ScenarioRunner` engine (experimental) | L |
 | M10 | #245 | Remove duplicated legacy core after default flip | M |
 
+## Amendment (2026-04-23) — M4'–M10' scope correction
+
+Hands-on inspection during M4 and a follow-up Oracle consult revealed that several "near-identical" entries in the surface-comparison table above are *named* the same as `abdp` types but model fundamentally different concepts. The migration plan is therefore revised as follows. The original architectural decision (Option C — adapter layer) stands; only the per-milestone scope changes.
+
+**Binding scope corrections:**
+
+- **`state/{bronze,silver,gold}.py` are NOT replaced.** `abdp.data.{Bronze,Silver,Gold}Contract` are abstract structural `Protocol[RowT]` types with only `manifest` / `rows`. The local schemas are concrete Pydantic models for the Korean apartment domain (e.g. `BronzeAptTransaction` carries 32 MOLIT fields). They remain younggeul-owned.
+- **`storage/snapshot.SnapshotManifest` is NOT replaced.** `abdp.data.SnapshotManifest` is a per-tier UUID-keyed dataclass with parent-pointer lineage; ours is a Pydantic multi-table dataset manifest with sha256-derived `dataset_snapshot_id`. Different concept under the same name. It remains younggeul-owned.
+- **`connectors/{retry,manifest,protocol}` adaptation is permanently abandoned** (issue #238 closed). `abdp.core.retry` is a decorator factory with a different invocation contract; `abdp.core.ManifestFactory` produces abdp `SnapshotManifest`, not `BronzeIngestManifest`. Only `connectors/hashing.sha256_payload` was successfully delegated to `abdp.core.stable_hash` (M3, merged).
+- **M10 no longer flips the default backend or targets ~600 LOC of deletions.** The success gate becomes "framework logic adopted where semantics actually match, with parity tests covering each adopted surface."
+
+**Revised milestone map (M-prefixes are internal IDs only; not present in issue titles):**
+
+| # | Issue | Revised deliverable |
+|---|---|---|
+| M4' | [#239](https://github.com/kpubdata-lab/younggeul/issues/239) | `_compat.data` re-exports of `Bronze/Silver/GoldContract`, `SnapshotTier`, `AbdpSnapshotManifest` only. Schemas + storage manifest stay local. |
+| M5' | [#242](https://github.com/kpubdata-lab/younggeul/issues/242) | LangGraph run → `abdp.evidence.AuditLog` adapter. |
+| M6' | [#243](https://github.com/kpubdata-lab/younggeul/issues/243) | `--render abdp\|legacy` CLI flag using `abdp.reporting.render_{json,markdown}_report`. |
+| M7' | [#240](https://github.com/kpubdata-lab/younggeul/issues/240) | Simulation fit-gap matrix + runner-only adapters (no schema replacement). |
+| M8' | [#241](https://github.com/kpubdata-lab/younggeul/issues/241) | Expanded parity suite covering every adopted surface. |
+| M9' | [#244](https://github.com/kpubdata-lab/younggeul/issues/244) | Shadow-mode `ScenarioRunner` only. LangGraph stays the default execution engine. |
+| M10' | [#245](https://github.com/kpubdata-lab/younggeul/issues/245) | Selective-adoption finalization. **No default flip.** Remove only dead shims that selective adoption made unreachable. |
+
+The `YOUNGGEUL_CORE_BACKEND={local,abdp}` flag introduced in M2 still selects between local and adapter-routed code paths where adoption succeeded; the flag's default remains `local` indefinitely.
+
 ## References
 
 - Epic: [#235 — Adopt abdp framework for younggeul_core](https://github.com/kpubdata-lab/younggeul/issues/235)

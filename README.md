@@ -206,7 +206,7 @@ To install the abdp backend:
 pip install -e ".[abdp]"
 ```
 
-The default backend remains `local` until the M10 milestone (#245) flips it. Both backends MUST produce byte-identical JSON dumps and equivalent validation; this is enforced by the parity contract test suite (#241).
+The default backend remains `local`; per the M4'–M10' scope correction in [ADR-012](docs/adr/012-abdp-backed-core.md#amendment-2026-04-23--m4m10-scope-correction), `younggeul_core` adopts `abdp` selectively where semantics match (hashing today; audit log and reporting render path next) rather than flipping wholesale. Adopted surfaces are gated by the parity contract test suite (#241).
 
 ## License
 
