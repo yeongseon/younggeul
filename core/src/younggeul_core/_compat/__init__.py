@@ -34,7 +34,7 @@ def get_backend() -> Backend:
     """
     raw = os.environ.get(ENV_VAR, DEFAULT_BACKEND).strip().lower()
     if raw not in _VALID_BACKENDS:
-        raise ValueError(f"{ENV_VAR}={raw!r} is not supported. " f"Valid values: {sorted(_VALID_BACKENDS)}.")
+        raise ValueError(f"{ENV_VAR}={raw!r} is not supported. Valid values: {sorted(_VALID_BACKENDS)}.")
     return raw  # type: ignore[return-value]
 
 
