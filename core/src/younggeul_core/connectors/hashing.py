@@ -30,6 +30,6 @@ def sha256_payload(records: list[dict[str, Any]]) -> str:
     if get_backend() == "abdp":
         from abdp.core import JsonValue, stable_hash
 
-        return stable_hash(cast("JsonValue", records))
+        return str(stable_hash(cast("JsonValue", records)))
     canonical = json.dumps(records, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
