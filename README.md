@@ -189,6 +189,7 @@ Key architectural decisions are documented as ADRs:
 | [ADR-009](docs/adr/009-github-models-llm.md) | GitHub Models support for simulation LLM routing |
 | [ADR-010](docs/adr/010-data-pipeline-live-workflow.md) | Real live ingest wiring for the GitHub Actions data pipeline |
 | [ADR-011](docs/adr/011-simulate-live-snapshot-wiring.md) | Wire live snapshot data into the simulate CLI |
+| [ADR-012](docs/adr/012-abdp-backed-core.md) | Adopt abdp-backed compatibility architecture for `younggeul_core` |
 
 ## License
 
