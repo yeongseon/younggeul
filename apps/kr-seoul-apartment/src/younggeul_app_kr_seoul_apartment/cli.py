@@ -586,6 +586,16 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
     default=Path("./output/simulation"),
     show_default=True,
 )
+@click.option(
+    "--render",
+    "render_backend",
+    type=click.Choice(["legacy", "abdp"]),
+    default="legacy",
+    show_default=True,
+    help="Rendering backend for the simulation report. 'legacy' writes the existing markdown only; "
+    "'abdp' additionally writes a deterministic JSON report via abdp.reporting.render_json_report "
+    "(requires the [abdp] extra). See ADR-012.",
+)
 @click.pass_context
 def simulate_command(
     ctx: click.Context,
@@ -597,6 +607,7 @@ def simulate_command(
     baseline_dir: Path | None,
     gus: str | None,
     output_dir: Path,
+    render_backend: str,
 ) -> None:
     """Run the simulation graph and save a rendered Markdown report."""
     try:
@@ -655,15 +666,28 @@ def simulate_command(
         report_file = output_dir / f"simulation_report_{run_id}.md"
         report_file.write_text(rendered_report.markdown, encoding="utf-8")
 
+        report_json_file: Path | None = None
+        if render_backend == "abdp":
+            from younggeul_core._compat.reporting import render_json_report
+
+            report_json_file = output_dir / f"simulation_report_{run_id}.json"
+            report_json_file.write_text(
+                render_json_report(rendered_report.model_dump(mode="json")),
+                encoding="utf-8",
+            )
+
         data = {
             "run_id": run_id,
             "round_no": int(final_state.get("round_no", 0)),
             "event_ref_count": len(final_state.get("event_refs", [])),
             "warnings": list(final_state.get("warnings", [])),
             "report_file": str(report_file),
+            "report_json_file": str(report_json_file) if report_json_file else None,
             "rendered_report": rendered_report.model_dump(mode="json"),
         }
         text_lines = [rendered_report.markdown, "", f"Saved report: {report_file}"]
+        if report_json_file is not None:
+            text_lines.append(f"Saved JSON report: {report_json_file}")
         _output(ctx, data, text_lines)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
