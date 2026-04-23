@@ -91,6 +91,8 @@ export KPUBDATA_KOSIS_API_KEY=...    # 통계청 KOSIS
 younggeul ingest --source live --gu 11680 --month 202503 --output-dir ./output/live
 ```
 
+> The `kr-seoul-apartment` extra installs `kpubdata[xml]`, which pulls `xmltodict` so MOLIT's data.go.kr XML responses parse correctly. Older installs that pinned only `kpubdata` would silently return 0 records (see [#260](https://github.com/yeongseon/younggeul/issues/260)); reinstall with `pip install -e ".[kr-seoul-apartment]"` if upgrading.
+
 `--gu` is a 5-digit MOLIT sigungu code (e.g. `11680` = 강남구) and `--month` is `YYYYMM`. To populate YoY/MoM change ratios in the Gold output, fetch multiple months in one invocation via `--months`:
 
 ```bash

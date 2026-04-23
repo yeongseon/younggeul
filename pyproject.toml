@@ -48,7 +48,8 @@ observability = [
   "opentelemetry-exporter-otlp-proto-grpc>=1.20",
 ]
 kr-seoul-apartment = [
-  "kpubdata>=0.2.3",
+  # `[xml]` pulls xmltodict; without it MolitAptConnector silently returns 0 rows. See #260.
+  "kpubdata[xml]>=0.2.3",
   "pandas>=2.0",
 ]
 docs = [
