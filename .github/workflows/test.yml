@@ -7,6 +7,17 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        backend:
+          - name: local
+            extras: "dev,kr-seoul-apartment"
+          - name: abdp
+            extras: "dev,kr-seoul-apartment,abdp"
+    name: test (${{ matrix.backend.name }} backend)
+    env:
+      YOUNGGEUL_CORE_BACKEND: ${{ matrix.backend.name }}
     steps:
       - uses: actions/checkout@v6
       - uses: actions/setup-python@v6
@@ -14,11 +25,11 @@ jobs:
           python-version: "3.12"
       - uses: astral-sh/setup-uv@v7
       - name: Install dependencies
-        run: uv pip install --system -e ".[dev,kr-seoul-apartment]"
+        run: uv pip install --system -e ".[${{ matrix.backend.extras }}]"
       - name: Run unit tests
         run: pytest -m "not slow and not integration" --cov --cov-report=xml
       - name: Upload coverage
         uses: actions/upload-artifact@v7
         with:
-          name: coverage-report
+          name: coverage-report-${{ matrix.backend.name }}
           path: coverage.xml
