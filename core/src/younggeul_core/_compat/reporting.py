@@ -1,12 +1,12 @@
-"""Opt-in delegation to abdp.reporting render helpers (see ADR-012, M6').
+"""Opt-in delegation to abdp.reporting render helpers (see ADR-012 and the reporting render-flag work in issue #243, PR #251).
 
 This module gives the CLI a stable seam for switching between the local
 markdown rendering of `RenderedReport` (default, unchanged) and abdp's
 deterministic JSON renderer (`abdp.reporting.render_json_report`),
 selected at the call site by the `--render` flag on `simulate`.
 
-Per the M4'-M10' scope correction in ADR-012, the project does not adopt
-abdp's `AuditLog` or evidence/claim contracts here; M6' only adopts the
+Per the selective-adoption scope correction in ADR-012, the project does not adopt
+abdp's `AuditLog` or evidence/claim contracts here; the reporting render-flag work only adopts the
 output formatter, which operates on plain JSON-compatible primitives and
 therefore needs no semantic alignment with the simulation provenance
 model. Importing names from this module pulls in `abdp` lazily.

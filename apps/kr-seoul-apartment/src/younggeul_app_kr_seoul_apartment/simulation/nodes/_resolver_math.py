@@ -1,10 +1,10 @@
 """Pure round-resolution math extracted from :mod:`round_resolver`.
 
-Per Oracle's M9' design ruling F (REAL SHADOW EXECUTION, not synthesis):
+Per Oracle's design ruling F for the shadow-runner work (REAL SHADOW EXECUTION, not synthesis):
 the abdp ScenarioRunner adapter must invoke the *same* resolution logic
 the LangGraph node uses, never a fork. This module owns that single,
 pure implementation; the LangGraph node delegates to it and adds event
-publication on top, while the M9'-c shadow runner wraps it in a
+publication on top, while the shadow-runner slice wraps it in a
 :class:`younggeul_core._compat.scenario.CallableResolver`.
 
 The function is deliberately free of LangGraph state, event stores, and

@@ -42,29 +42,29 @@ Adopt an **adapter-layer architecture** (Option C in the design review). Specifi
 3. The default simulation engine remains LangGraph for the v0.3.x line. An `abdp.scenario.ScenarioRunner`-based engine is introduced later as an **experimental, non-default** second engine, only after parity with the LangGraph engine is demonstrated under the existing eval suite.
 4. Auditability, evaluation, and reporting primitives from `abdp` are wired in as an **optional render path** behind a CLI flag (`--render abdp|legacy`, default `legacy`), so the existing report behavior cannot regress silently.
 
-The migration is broken into ten independently shippable milestones (M1–M10) tracked as GitHub issues #236–#245 under epic #235. Each milestone is independently revertible via the backend flag and is gated on a parity test suite (M6).
+The migration is broken into ten independently shippable work items tracked as GitHub issues #236–#245 under epic #235. Each work item is independently revertible via the backend flag and is gated on the parity-suite expansion (issue #241).
 
 ### Alternatives considered
 
 - **Option A — Full migration.** Replace `younggeul_core` with `abdp` outright and rewrite the LangGraph engine onto `abdp.scenario.ScenarioRunner`. Rejected for this iteration: it couples three risks at once — pinning to an immature framework version, a package-wide API churn that touches 1,178 tests, and an execution-model rewrite (LangGraph → `ScenarioRunner`) that cannot be validated incrementally. Re-evaluated when the criteria in *Consequences → Exit criteria* below are met.
 
-- **Option B — Bridge-only.** Keep `younggeul_core` and LangGraph untouched; only translate the LangGraph run output into `abdp.evidence.AuditLog` at the boundary. Rejected as a terminal state: it preserves all duplication permanently and turns the bridge into a maintenance liability. Acceptable only as an interim step inside Option C (covered by M7).
+- **Option B — Bridge-only.** Keep `younggeul_core` and LangGraph untouched; only translate the LangGraph run output into `abdp.evidence.AuditLog` at the boundary. Rejected as a terminal state: it preserves all duplication permanently and turns the bridge into a maintenance liability. Acceptable only as an interim step inside Option C (covered by the LangGraph→AuditLog adapter work).
 
 ## Consequences
 
 ### Positive
 
-- **Bounded blast radius per milestone.** App code does not change; only `younggeul_core` internals do. Each milestone is a small, reviewable diff with a parity test.
-- **Net code reduction.** When M3–M5 land, ~600 LOC of `core/` becomes thin re-exports/wrappers; M10 deletes the legacy implementations after parity is proven.
+- **Bounded blast radius per work item.** App code does not change; only `younggeul_core` internals do. Each work item is a small, reviewable diff with a parity test.
+- **Net code reduction.** When the connectors-hashing adoption (#238), the data-aliases adoption (#239), and the simulation-overlap refactor land, ~600 LOC of `core/` becomes thin re-exports/wrappers; the final cleanup then deletes the legacy implementations after parity is proven.
 - **Auditability surface comes for free.** `abdp.evidence.AuditLog`, `abdp.evaluation.{evaluate_metrics, evaluate_gates}`, and `abdp.reporting.render_{json,markdown}_report` become available behind the optional render path without rewriting our renderer.
 - **No paradigm bet.** LangGraph stays the production engine; the `ScenarioRunner` engine is a parallel, opt-in track that can be abandoned without affecting v0.3.x.
 - **Reversible.** The `YOUNGGEUL_CORE_BACKEND={local,abdp}` flag lets us switch backends per-process without code changes.
 
 ### Negative
 
-- **Two-stack interim period.** Until M10, both `local` and `abdp` backends ship. The compat layer adds a small amount of indirection.
+- **Two-stack interim period.** Until the selective-adoption finalization (issue #245), both `local` and `abdp` backends ship. The compat layer adds a small amount of indirection.
 - **External version pin.** We pin a specific `abdp` commit, not a published PyPI version. Upgrades require a deliberate parity rerun.
-- **Bridge code (M7) risks becoming permanent** if M9/M10 stall. Mitigation: every adapter-introducing milestone has a paired cleanup criterion in the epic's risk register.
+- **Bridge code risks becoming permanent** if the shadow-runner work (#244) or the selective-adoption finalization (#245) stalls. Mitigation: every adapter-introducing work item has a paired cleanup criterion in the epic's risk register.
 
 ### Exit criteria for revisiting Option A
 
@@ -72,58 +72,87 @@ A full Option A cutover (drop `younggeul_core`, replace LangGraph with `Scenario
 
 1. `abdp` publishes a stable, semver-versioned release on PyPI (no more `0.1.0.dev0` mismatch).
 2. younggeul has a concrete need for multi-engine simulation that LangGraph alone cannot satisfy.
-3. The experimental `ScenarioRunner` engine from M9 has matched the LangGraph engine's outputs under the full eval suite (`pytest -m eval`) in shadow mode for at least one minor release.
+3. The experimental `ScenarioRunner` engine from the shadow-runner work (issue #244) has matched the LangGraph engine's outputs under the full eval suite (`pytest -m eval`) in shadow mode for at least one minor release.
 
 Until then, the stance is: **C now, A later if earned.**
 
 ## Risk register
 
-1. **Semantic mismatch in "near-identical" types.** Local and `abdp` Pydantic models may validate or serialize differently in edge cases. *Mitigation:* M6 introduces a parametrized parity suite asserting byte-identical JSON dumps and equivalent validation behavior across both backends.
+1. **Semantic mismatch in "near-identical" types.** Local and `abdp` Pydantic models may validate or serialize differently in edge cases. *Mitigation:* the parity-suite expansion (issue #241) introduces a parametrized suite asserting byte-identical JSON dumps and equivalent validation behavior across both backends.
 2. **`abdp` version instability** (tag `v0.3.0` vs internal `0.1.0.dev0`). *Mitigation:* pin a specific commit SHA in `pyproject.toml`; isolate every `abdp` import behind `_compat`; upstream fixes asynchronously.
-3. **Behavior drift in simulation outputs.** Even with matching types, report content or event sequences could shift. *Mitigation:* keep LangGraph default; M9 adds shadow-mode parity tests on event count, final state, and rendered report semantics before any engine flip.
-4. **Bridge code becoming permanent.** Adapter layers tend to outlive their stated purpose. *Mitigation:* M7's adapter has a paired removal criterion in M10; every adapter-introducing PR must reference its cleanup issue.
-5. **LangGraph removal scope creep.** LangGraph is currently a hard dependency wired into the web layer, the CLI, and many tests. *Mitigation:* defer any LangGraph removal until after M9 ScenarioRunner parity is independently demonstrated; treat removal as a separate post-M10 decision.
+3. **Behavior drift in simulation outputs.** Even with matching types, report content or event sequences could shift. *Mitigation:* keep LangGraph default; the shadow-runner work (issue #244) adds shadow-mode parity tests on event count, final state, and rendered report semantics before any engine flip.
+4. **Bridge code becoming permanent.** Adapter layers tend to outlive their stated purpose. *Mitigation:* the LangGraph→AuditLog adapter work has a paired removal criterion in the selective-adoption finalization (issue #245); every adapter-introducing PR must reference its cleanup issue.
+5. **LangGraph removal scope creep.** LangGraph is currently a hard dependency wired into the web layer, the CLI, and many tests. *Mitigation:* defer any LangGraph removal until after shadow `ScenarioRunner` parity is independently demonstrated; treat removal as a separate post-finalization decision.
 
 ## Implementation milestones
 
-| # | Issue | Title | Size |
+| Label | Issue | Title | Size |
 |---|---|---|---|
-| M1 | #236 | ADR-012 (this document) | S |
-| M2 | #237 | Add internal abdp backend switch | M |
-| M3 | #238 | Delegate `connectors/{hashing,retry,manifest,protocol}` → `abdp.core` | S |
-| M4 | #239 | Delegate `state/{bronze,silver,gold}` + `storage/snapshot` → `abdp.data` | M |
-| M5 | #240 | Refactor `state/simulation` into abdp overlap + extensions | M |
-| M6 | #241 | Contract-parity test suite (local vs abdp) | M |
-| M7 | #242 | LangGraph run → `abdp.evidence.AuditLog` adapter | M |
-| M8 | #243 | Optional `--render abdp` CLI path | M |
-| M9 | #244 | Prototype `ScenarioRunner` engine (experimental) | L |
-| M10 | #245 | Remove duplicated legacy core after default flip | M |
+| ADR | #236 | ADR-012 (this document) | S |
+| Backend switch | #237 | Add internal abdp backend switch | M |
+| Connectors hashing | #238 | Delegate `connectors/{hashing,retry,manifest,protocol}` → `abdp.core` | S |
+| Data aliases | #239 | Delegate `state/{bronze,silver,gold}` + `storage/snapshot` → `abdp.data` | M |
+| Simulation overlap | #240 | Refactor `state/simulation` into abdp overlap + extensions | M |
+| Parity suite | #241 | Contract-parity test suite (local vs abdp) | M |
+| AuditLog adapter | #242 | LangGraph run → `abdp.evidence.AuditLog` adapter | M |
+| Reporting render flag | #243 | Optional `--render abdp` CLI path | M |
+| Shadow runner | #244 | Prototype `ScenarioRunner` engine (experimental) | L |
+| Finalization | #245 | Remove duplicated legacy core after default flip | M |
 
-## Amendment (2026-04-23) — M4'–M10' scope correction
+## Amendment (2026-04-23) — selective-adoption scope correction
 
-Hands-on inspection during M4 and a follow-up Oracle consult revealed that several "near-identical" entries in the surface-comparison table above are *named* the same as `abdp` types but model fundamentally different concepts. The migration plan is therefore revised as follows. The original architectural decision (Option C — adapter layer) stands; only the per-milestone scope changes.
+Hands-on inspection during the data-aliases adoption (issue #239) and a follow-up Oracle consult revealed that several "near-identical" entries in the surface-comparison table above are *named* the same as `abdp` types but model fundamentally different concepts. The migration plan is therefore revised as follows. The original architectural decision (Option C — adapter layer) stands; only the per-work-item scope changes.
 
 **Binding scope corrections:**
 
 - **`state/{bronze,silver,gold}.py` are NOT replaced.** `abdp.data.{Bronze,Silver,Gold}Contract` are abstract structural `Protocol[RowT]` types with only `manifest` / `rows`. The local schemas are concrete Pydantic models for the Korean apartment domain (e.g. `BronzeAptTransaction` carries 32 MOLIT fields). They remain younggeul-owned.
 - **`storage/snapshot.SnapshotManifest` is NOT replaced.** `abdp.data.SnapshotManifest` is a per-tier UUID-keyed dataclass with parent-pointer lineage; ours is a Pydantic multi-table dataset manifest with sha256-derived `dataset_snapshot_id`. Different concept under the same name. It remains younggeul-owned.
-- **`connectors/{retry,manifest,protocol}` adaptation is permanently abandoned** (issue #238 closed). `abdp.core.retry` is a decorator factory with a different invocation contract; `abdp.core.ManifestFactory` produces abdp `SnapshotManifest`, not `BronzeIngestManifest`. Only `connectors/hashing.sha256_payload` was successfully delegated to `abdp.core.stable_hash` (M3, merged).
-- **M5' (#242, LangGraph→AuditLog adapter) is deferred to M9'** (2026-04-23 follow-up Oracle re-consult). `abdp.evidence.AuditLog` is a frozen dataclass whose `__post_init__` enforces `scenario_key == run.scenario_key` and `seed == run.seed`, where `Seed = NewType("Seed", int)`. younggeul has no integer seed, no `scenario_key`, no per-step `SimulationState` snapshots, and no UUID-keyed `SnapshotRef`. Building an AuditLog now would force inventing all of those, contradicting the binding rule "don't invent public IDs to satisfy Protocols (keep synthesis private to M9 adapters)." The shadow `ScenarioRunner` in M9' produces `ScenarioRun` / `Seed` / `scenario_key` / per-step `SimulationState` natively, so the AuditLog projection happens there with real provenance, not synthetic. **M6' (reporting renderer) becomes the next shippable milestone** because reporting needs only formatting compatibility, not simulation-provenance compatibility.
-- **M10 no longer flips the default backend or targets ~600 LOC of deletions.** The success gate becomes "framework logic adopted where semantics actually match, with parity tests covering each adopted surface."
+- **`connectors/{retry,manifest,protocol}` adaptation is permanently abandoned** (issue #238 closed). `abdp.core.retry` is a decorator factory with a different invocation contract; `abdp.core.ManifestFactory` produces abdp `SnapshotManifest`, not `BronzeIngestManifest`. Only `connectors/hashing.sha256_payload` was successfully delegated to `abdp.core.stable_hash` (the connectors-hashing adoption, merged).
+- **The LangGraph→AuditLog adapter work (issue #242, deferred and absorbed into #244) is deferred to the shadow-runner work (issue #244)** (2026-04-23 follow-up Oracle re-consult). `abdp.evidence.AuditLog` is a frozen dataclass whose `__post_init__` enforces `scenario_key == run.scenario_key` and `seed == run.seed`, where `Seed = NewType("Seed", int)`. younggeul has no integer seed, no `scenario_key`, no per-step `SimulationState` snapshots, and no UUID-keyed `SnapshotRef`. Building an AuditLog now would force inventing all of those, contradicting the binding rule "don't invent public IDs to satisfy Protocols (keep synthesis private to the shadow-runner adapters)." The shadow `ScenarioRunner` in the shadow-runner work (issue #244) produces `ScenarioRun` / `Seed` / `scenario_key` / per-step `SimulationState` natively, so the AuditLog projection happens there with real provenance, not synthetic. **The reporting render-flag work (issue #243, PR #251) becomes the next shippable work item** because reporting needs only formatting compatibility, not simulation-provenance compatibility.
+- **The selective-adoption finalization (issue #245) no longer flips the default backend or targets ~600 LOC of deletions.** The success gate becomes "framework logic adopted where semantics actually match, with parity tests covering each adopted surface."
 
-**Revised milestone map (M-prefixes are internal IDs only; not present in issue titles):**
+**Revised work-item map:**
 
-| # | Issue | Revised deliverable |
+| Label | Issue | Revised deliverable |
 |---|---|---|
-| M4' | [#239](https://github.com/kpubdata-lab/younggeul/issues/239) | `_compat.data` re-exports of `Bronze/Silver/GoldContract`, `SnapshotTier`, `AbdpSnapshotManifest` only. Schemas + storage manifest stay local. |
-| ~~M5'~~ | ~~[#242](https://github.com/kpubdata-lab/younggeul/issues/242)~~ | **Deferred to M9'** (2026-04-23 Oracle re-consult). Producing an `abdp.evidence.AuditLog` from the current LangGraph run output requires synthesizing public IDs (`Seed: int`, `scenario_key`, `SnapshotRef.snapshot_id: UUID`, deterministic evidence/claim UUIDs) and per-step `SimulationState` snapshots LangGraph does not record. The shadow `ScenarioRunner` in M9' produces all of these natively, so the AuditLog adapter becomes a thin projection there instead of public-ID synthesis here. |
-| M6' | [#243](https://github.com/kpubdata-lab/younggeul/issues/243) | ✅ **Shipped** in [PR #251](https://github.com/kpubdata-lab/younggeul/pull/251). `--render abdp\|legacy` CLI flag on `simulate`, delegating to `abdp.reporting.render_json_report` over `RenderedReport.model_dump(mode="json")`. Markdown remains the byte-identical default. |
-| M7' | [#240](https://github.com/kpubdata-lab/younggeul/issues/240) | **Doc-only** (Oracle 2026-04-23): [`docs/architecture/abdp-simulation-fit-gap.md`](../architecture/abdp-simulation-fit-gap.md). Full surface inventory + per-field gap classification + per-surface M9'/M10' landing plan, used as the build-spec for M9'. No `state/simulation.py` change, no Protocol re-exports, no overlap parity test (every overlap surface is `public-ID-bearing` and would require pre-M9' synthesis). |
-| M8' | [#241](https://github.com/kpubdata-lab/younggeul/issues/241) | Expanded parity suite covering every adopted surface (excludes AuditLog until M9'). |
-| M9' | [#244](https://github.com/kpubdata-lab/younggeul/issues/244) | Shadow-mode `ScenarioRunner` **and** the real `AuditLog` adapter absorbed from #242. LangGraph stays the default execution engine. Shipped in three PRs: M9'-a (`_compat/ids.py` ID helpers, [PR #254](https://github.com/kpubdata-lab/younggeul/pull/254)), M9'-b (`_compat/scenario.py` adapter primitives, [PR #255](https://github.com/kpubdata-lab/younggeul/pull/255)), and M9'-c (`apps/.../simulation/shadow_runner.py` + `simulate --shadow-audit-log`, this PR). |
-| M10' | [#245](https://github.com/kpubdata-lab/younggeul/issues/245) | Selective-adoption finalization. **No default flip.** Remove only dead shims that selective adoption made unreachable. |
+| Data aliases | [#239](https://github.com/kpubdata-lab/younggeul/issues/239) | `_compat.data` re-exports of `Bronze/Silver/GoldContract`, `SnapshotTier`, `AbdpSnapshotManifest` only. Schemas + storage manifest stay local. |
+| LangGraph→AuditLog adapter work (deferred and absorbed) | ~~[#242](https://github.com/kpubdata-lab/younggeul/issues/242)~~ | **Deferred to the shadow-runner work (issue #244)** (2026-04-23 Oracle re-consult). Producing an `abdp.evidence.AuditLog` from the current LangGraph run output requires synthesizing public IDs (`Seed: int`, `scenario_key`, `SnapshotRef.snapshot_id: UUID`, deterministic evidence/claim UUIDs) and per-step `SimulationState` snapshots LangGraph does not record. The shadow `ScenarioRunner` in the shadow-runner work produces all of these natively, so the AuditLog adapter becomes a thin projection there instead of public-ID synthesis here. |
+| Reporting render flag | [#243](https://github.com/kpubdata-lab/younggeul/issues/243) | ✅ **Shipped** in [PR #251](https://github.com/kpubdata-lab/younggeul/pull/251). `--render abdp\|legacy` CLI flag on `simulate`, delegating to `abdp.reporting.render_json_report` over `RenderedReport.model_dump(mode="json")`. Markdown remains the byte-identical default. |
+| Simulation fit-gap doc | [#240](https://github.com/kpubdata-lab/younggeul/issues/240) | **Doc-only** (Oracle 2026-04-23): [`docs/architecture/abdp-simulation-fit-gap.md`](../architecture/abdp-simulation-fit-gap.md). Full surface inventory + per-field gap classification + per-surface shadow-runner/finalization landing plan, used as the build-spec for the shadow-runner work. No `state/simulation.py` change, no Protocol re-exports, no overlap parity test (every overlap surface is `public-ID-bearing` and would require pre-shadow-runner synthesis). |
+| Parity suite expansion | [#241](https://github.com/kpubdata-lab/younggeul/issues/241) | Expanded parity suite covering every adopted surface (excludes AuditLog until the shadow-runner work). |
+| Shadow runner | [#244](https://github.com/kpubdata-lab/younggeul/issues/244) | Shadow-mode `ScenarioRunner` **and** the real `AuditLog` adapter absorbed from #242. LangGraph stays the default execution engine. Shipped in three PRs: PR #254 (ID helpers), PR #255 (scenario adapter), and PR #256 (shadow runner). |
+| Finalization | [#245](https://github.com/kpubdata-lab/younggeul/issues/245) | ✅ **Shipped.** Selective-adoption finalization. **No default flip.** Doc and CI hardening only — no code/module removal owed (remaining local surfaces are intentionally younggeul-owned domain types and the LangGraph runtime, not duplicate framework code). See "Final selective-adoption inventory" below. |
 
-The `YOUNGGEUL_CORE_BACKEND={local,abdp}` flag introduced in M2 still selects between local and adapter-routed code paths where adoption succeeded; the flag's default remains `local` indefinitely.
+### Final selective-adoption inventory
+
+The 2026-04-23 finalization ruling (Oracle, recorded in this amendment) closed out the selective-adoption epic without flipping the default backend and without deleting any local module. The inventory below freezes the per-surface adoption decision and the parity tests that gate it. Future changes to this inventory require a new ADR or amendment.
+
+**Adopted surfaces (delegated to `abdp` and gated by parity tests)**
+
+| Surface | Local site | abdp target | Parity test |
+|---|---|---|---|
+| Payload hashing | `core/connectors/hashing.py::sha256_payload` | `abdp.core.stable_hash` | `core/tests/contract/test_compat_hashing_parity.py` |
+| Bronze/Silver/Gold contract aliases | `core/_compat/data.py::{BronzeContract, SilverContract, GoldContract, SnapshotTier, AbdpSnapshotManifest}` | `abdp.data` re-exports | `core/tests/contract/test_compat_data_aliases.py` |
+| JSON report renderer | `core/_compat/reporting.py::render_json_report` | `abdp.reporting.render_json_report` | `core/tests/contract/test_compat_reporting.py`, `apps/kr-seoul-apartment/tests/unit/test_cli_render_flag.py` |
+| Deterministic ID helpers | `core/_compat/ids.py::{derive_scenario_key, derive_snapshot_uuid, SnapshotIdRegistry}` | `abdp.simulation` ID contract (`scenario_key`, `Seed`, `SnapshotRef.snapshot_id` UUID) | `core/tests/contract/test_compat_ids.py` |
+| Scenario / participant / action / segment adapters + shadow `AuditLog` projection | `core/_compat/scenario.py::{AbdpSegmentAdapter, AbdpParticipantAdapter, AbdpActionAdapter, CallableAgent, CallableResolver, to_abdp_snapshot_ref, to_abdp_simulation_state, project_audit_log}` and `apps/.../simulation/shadow_runner.py::run_shadow_audit` | `abdp.simulation.{SegmentState, ParticipantState, ActionProposal, ScenarioRunner}`, `abdp.evidence.AuditLog` | `core/tests/contract/test_compat_scenario.py`, `apps/kr-seoul-apartment/tests/integration/test_simulate_cli_shadow_audit.py` |
+
+**Retained local by design (NOT delegated)**
+
+| Surface | Rationale |
+|---|---|
+| `core/storage/snapshot.py::{SnapshotManifest, SnapshotTableEntry}` | younggeul's snapshot manifest models the Korean-public-data ingest layout (Bronze tables keyed by `gu_code`/`month`, MOLIT/BOK/KOSTAT provenance fields). `abdp.data.SnapshotManifest` models a generic decision-pipeline snapshot ref. The shapes are not interchangeable; bridging via `_compat/data.py::AbdpSnapshotManifest` is sufficient at the boundary. |
+| `core/state/{bronze,silver,gold}.py` | Korean apartment domain types (apartment trades, base rate, net-migration). The `abdp.data.{Bronze,Silver,Gold}Contract` aliases in `_compat/data.py` cover the framework-facing typing needs without forcing the domain models out of younggeul. |
+| `core/state/simulation.py` | younggeul's `SimulationState` is the LangGraph TypedDict consumed by the runtime. `abdp.simulation.SimulationState` is a Protocol used at the shadow-runner boundary. The shadow runner (`apps/.../simulation/shadow_runner.py`) projects the LangGraph state into the abdp Protocol; the canonical in-memory representation stays local. |
+| `apps/kr-seoul-apartment/src/younggeul_app_kr_seoul_apartment/simulation/` (LangGraph runtime — nodes, graph, events) | This is the production execution engine and the default code path under `YOUNGGEUL_CORE_BACKEND=local`. The shadow runner runs alongside it via `simulate --shadow-audit-log` for `AuditLog` provenance; replacing LangGraph would be a separate post-finalization decision. |
+
+**CI hardening shipped with the finalization**
+
+- `.github/workflows/test.yml` matrix simplified to `backend: [local, abdp]`; both legs install `[dev,kr-seoul-apartment,abdp]`.
+- Test scope changed from `pytest -m "not slow and not integration"` to `pytest -m "not slow and not live"` so the shadow-runner integration test (`test_simulate_cli_shadow_audit`) and other integration coverage actually execute on every push.
+- Guardrail test `test_default_backend_remains_local` in `core/tests/contract/test_compat_guardrails.py` enforces `DEFAULT_BACKEND == "local"` at the source level — a default flip now requires a new ADR/amendment, not a constant rename.
+
+The `YOUNGGEUL_CORE_BACKEND={local,abdp}` flag introduced in the backend-switch work (issue #237) still selects between local and adapter-routed code paths where adoption succeeded; the flag's default remains `local` indefinitely.
 
 ## References
 

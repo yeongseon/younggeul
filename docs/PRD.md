@@ -40,16 +40,16 @@ To provide an agent-based simulation platform that:
 - Using Seoul Real Estate Information Plaza (서울부동산정보광장) as ground truth.
 
 ## 6. Key Features (Milestones)
-- **M1: Data Contracts & Schemas**: Define Bronze/Silver/Gold data tiers using Pydantic v2.
-- **M2: Data Connectors**: Integration with `data.go.kr` (MOLIT), BOK ECOS, and KOSIS via the [kpubdata](https://pypi.org/project/kpubdata/) unified client (see ADR-007).
-- **M3: Data Pipeline**: Deterministic ETL (Bronze → Silver → Gold) without LLM intervention.
-- **M4: Snapshot System**: Immutable datasets with `dataset_snapshot_id` and SHA-256 verification (Reference: ADR-003).
-- **M5: Simulation Core**: LangGraph state machine combining 5 LLM agents and 5 deterministic nodes (Reference: ADR-004).
-- **M6: Evidence & Reporting**: JSON-first claim generation followed by a citation gate and prose rendering (Reference: ADR-005).
-- **M7: Evaluation**: Regression testing using promptfoo benchmarks and golden datasets.
-- **M8: Observability**: Full tracing with OpenTelemetry and LangSmith.
-- **M9: CLI & API**: Management via `typer` CLI and `FastAPI` endpoints.
-- **M10: Release & Documentation**: Public release with comprehensive user guides.
+- **Data Contracts & Schemas**: Define Bronze/Silver/Gold data tiers using Pydantic v2.
+- **Data Connectors**: Integration with `data.go.kr` (MOLIT), BOK ECOS, and KOSIS via the [kpubdata](https://pypi.org/project/kpubdata/) unified client (see ADR-007).
+- **Data Pipeline**: Deterministic ETL (Bronze → Silver → Gold) without LLM intervention.
+- **Snapshot System**: Immutable datasets with `dataset_snapshot_id` and SHA-256 verification (Reference: ADR-003).
+- **Simulation Core**: LangGraph state machine combining 5 LLM agents and 5 deterministic nodes (Reference: ADR-004).
+- **Evidence & Reporting**: JSON-first claim generation followed by a citation gate and prose rendering (Reference: ADR-005).
+- **Evaluation**: Regression testing using promptfoo benchmarks and golden datasets.
+- **Observability**: Full tracing with OpenTelemetry and LangSmith.
+- **CLI & API**: Management via `typer` CLI and `FastAPI` endpoints.
+- **Release & Documentation**: Public release with comprehensive user guides.
 
 ## 7. Architecture Overview
 The system follows a three-plane separation architecture:

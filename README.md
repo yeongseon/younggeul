@@ -191,9 +191,9 @@ Key architectural decisions are documented as ADRs:
 | [ADR-011](docs/adr/011-simulate-live-snapshot-wiring.md) | Wire live snapshot data into the simulate CLI |
 | [ADR-012](docs/adr/012-abdp-backed-core.md) | Adopt abdp-backed compatibility architecture for `younggeul_core` |
 
-## abdp backend (experimental)
+## abdp backend
 
-`younggeul_core` is being refactored as a thin compatibility layer over the [agent-based-decision-pipeline (abdp)](https://github.com/yeongseon/agent-based-decision-pipeline) framework (see [ADR-012](docs/adr/012-abdp-backed-core.md)). The backend is selected at runtime via:
+`younggeul_core` ships a thin compatibility layer over the [agent-based-decision-pipeline (abdp)](https://github.com/yeongseon/agent-based-decision-pipeline) framework (see [ADR-012](docs/adr/012-abdp-backed-core.md)). The backend is selected at runtime via:
 
 ```bash
 export YOUNGGEUL_CORE_BACKEND=local   # default; preserves v0.3.0 behavior
@@ -206,7 +206,7 @@ To install the abdp backend:
 pip install -e ".[abdp]"
 ```
 
-The default backend remains `local`; per the M4'–M10' scope correction in [ADR-012](docs/adr/012-abdp-backed-core.md#amendment-2026-04-23--m4m10-scope-correction), `younggeul_core` adopts `abdp` selectively where semantics match (hashing today; audit log and reporting render path next) rather than flipping wholesale. Adopted surfaces are gated by the parity contract test suite (#241).
+The default backend remains `local` indefinitely. Per the 2026-04-23 selective-adoption scope correction in [ADR-012](docs/adr/012-abdp-backed-core.md#amendment-2026-04-23--selective-adoption-scope-correction), `younggeul_core` adopts `abdp` only where semantics actually match — hashing (`abdp.core.stable_hash`), Bronze/Silver/Gold contract aliases, the JSON report renderer, the deterministic ID helpers (`_compat/ids.py`), and the shadow `ScenarioRunner` adapters (`_compat/scenario.py`) that produce a real `abdp.evidence.AuditLog` from LangGraph runs via `simulate --shadow-audit-log`. The Korean apartment domain types, snapshot manifest, and LangGraph runtime stay local by design. See ADR-012's "Final selective-adoption inventory" subsection for the full per-surface breakdown. Adopted surfaces are gated by the parity contract test suite (#241), and CI runs the full suite under both `YOUNGGEUL_CORE_BACKEND=local` and `=abdp`.
 
 ## License
 

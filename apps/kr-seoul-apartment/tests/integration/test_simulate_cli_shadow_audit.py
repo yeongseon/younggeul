@@ -1,4 +1,4 @@
-"""Integration test for ``younggeul simulate --shadow-audit-log`` (M9'-c).
+"""Integration test for ``younggeul simulate --shadow-audit-log``.
 
 End-to-end exercise of the abdp shadow runner:
 
@@ -8,7 +8,7 @@ End-to-end exercise of the abdp shadow runner:
    carrying the abdp ``AuditLog`` shape (``scenario_key`` versioned,
    ``seed == 0``, non-empty ``run.steps``).
 
-Per Oracle's M9' design ruling D, the synthesized identifiers (Seed,
+Per Oracle's design ruling D for the shadow-runner work, the synthesized identifiers (Seed,
 scenario_key, snapshot UUID, proposal_id) are runner-internal: this test
 verifies their *internal* presence in the abdp JSON, never that they
 leak into the markdown report.
