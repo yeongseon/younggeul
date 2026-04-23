@@ -145,15 +145,17 @@ These are **binding** for any work landed before M9' opens:
 - ✗ Do not promise cross-engine determinism, schema parity, or stable public IDs in this milestone.
 - ✗ Do not modify LangGraph nodes to record per-step `SimulationState` snapshots. That is M9' shadow-runner work.
 
-## 6. Required M9' design decisions (open questions)
+## 6. Required M9' design decisions (open questions) — RESOLVED
+
+> **Status (2026-04-23): Resolved by Oracle's binding M9' design ruling and shipped in PRs #254 (M9'-a), #255 (M9'-b), and the M9'-c shadow runner PR.** Each open question's resolution is recorded inline below.
 
 M9' MUST resolve the following before it can build the adapters in §4. M7' does **not** answer them:
 
-1. What is the canonical source of `Seed`? (See §2 hard constraints — must be a real RNG seed with cross-engine semantics, not derived from `run_id`.)
-2. What is the canonical source of `scenario_key`? (Must be defined from the scenario contract, e.g. a deterministic function of `(scenario_name, target_gus, target_period_start, target_period_end, shocks_signature, roster_signature)` — but the exact shape is M9'-owned.)
-3. What is the mapping algorithm for `snapshot_id` (sha256 hex → UUID)? (Must be reversible or paired with an auditable lookup table; must not silently drop the sha256 content-addressing semantics younggeul depends on for snapshot integrity.)
-4. What is the public-vs-internal status of synthesized IDs? (Default position: internal/opaque/stable, never surfaced to users, no `--scenario-key` or `--seed` CLI flags introduced unless a downstream user need is documented.)
-5. Does `SimulationState` become the canonical in-memory form, or remain a runner-boundary projection? (Default position: projection-only, leaving `GraphState` TypedDict as canonical.)
+1. What is the canonical source of `Seed`? (See §2 hard constraints — must be a real RNG seed with cross-engine semantics, not derived from `run_id`.) — **RESOLVED**: `Seed: int = 0` runner-internal default (`DEFAULT_SHADOW_SEED` in `younggeul_core._compat.ids`). No CLI flag introduced. The seed is fixed because the shadow runner exercises deterministic policies whose decisions don't consume RNG.
+2. What is the canonical source of `scenario_key`? — **RESOLVED**: `yg-scenario-v1:<full sha256 hex>` of the canonicalized `ScenarioSpec` JSON (see `derive_scenario_key`). Hash is never truncated.
+3. What is the mapping algorithm for `snapshot_id` (sha256 hex → UUID)? — **RESOLVED**: `uuid5(YOUNGGEUL_SNAPSHOT_NAMESPACE, sha256_hex)` with a per-run `SnapshotIdRegistry` that records the bijection so the original sha256 is never lost.
+4. What is the public-vs-internal status of synthesized IDs? — **RESOLVED**: All synthesized IDs (Seed, scenario_key, snapshot UUID, proposal_id) are runner-internal. They appear only in the abdp `AuditLog` JSON written under `--shadow-audit-log`; they MUST NOT appear in markdown reports, CLI summary text, or younggeul-owned PK storage. The shadow audit-log integration test asserts the markdown report does not contain `yg-scenario-v1:`.
+5. Does `SimulationState` become the canonical in-memory form, or remain a runner-boundary projection? — **RESOLVED**: Projection-only. The LangGraph `GraphState` TypedDict (in `apps/`) remains canonical; `SimulationState` (in `core`) and abdp's `SimulationState` are runner-boundary projections built by `to_abdp_simulation_state`.
 
 ## 7. Verification
 

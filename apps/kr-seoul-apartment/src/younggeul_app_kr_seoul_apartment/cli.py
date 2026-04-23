@@ -8,7 +8,7 @@ import subprocess
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import uuid4
 
 import click
@@ -26,6 +26,9 @@ from .simulation.event_store import InMemoryEventStore
 from .simulation.evidence.store import InMemoryEvidenceStore
 from .simulation.graph import build_simulation_graph
 from .simulation.graph_state import seed_graph_state
+
+if TYPE_CHECKING:
+    from .simulation.graph_state import SimulationGraphState
 from .simulation.adapters.filesystem_snapshot_reader import FilesystemSnapshotReader
 from .simulation.metrics import init_metrics, shutdown_metrics
 from .simulation.schemas.report import RenderedReport
@@ -596,6 +599,18 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
     "'abdp' additionally writes a deterministic JSON report via abdp.reporting.render_json_report "
     "(requires the [abdp] extra). See ADR-012.",
 )
+@click.option(
+    "--shadow-audit-log",
+    "shadow_audit_log",
+    type=click.Path(path_type=Path, dir_okay=False),
+    default=None,
+    help="Optional path to write a deterministic abdp AuditLog JSON for the run. "
+    "When supplied, the same decision/resolution logic is replayed through "
+    "abdp.scenario.ScenarioRunner (shadow execution) and the resulting AuditLog "
+    "is rendered via abdp.reporting.render_json_report. Requires --snapshot-dir "
+    "and the [abdp] extra. Internal IDs (scenario_key, snapshot UUID, proposal_id) "
+    "are runner-internal and never appear in younggeul-owned storage. See ADR-012 (M9'-c).",
+)
 @click.pass_context
 def simulate_command(
     ctx: click.Context,
@@ -608,6 +623,7 @@ def simulate_command(
     gus: str | None,
     output_dir: Path,
     render_backend: str,
+    shadow_audit_log: Path | None,
 ) -> None:
     """Run the simulation graph and save a rendered Markdown report."""
     try:
@@ -676,6 +692,35 @@ def simulate_command(
                 encoding="utf-8",
             )
 
+        shadow_audit_log_file: Path | None = None
+        if shadow_audit_log is not None:
+            if snapshot_dir is None:
+                raise click.ClickException("--shadow-audit-log requires --snapshot-dir")
+            from younggeul_core._compat.reporting import render_json_report
+
+            from .simulation.shadow_runner import run_shadow_audit
+
+            shadow_snapshot = final_state.get("snapshot")
+            if shadow_snapshot is None:
+                raise click.ClickException("--shadow-audit-log requires an initialized snapshot")
+            audit_log = run_shadow_audit(
+                cast("SimulationGraphState", final_state),
+                snapshot_sha256_hex=shadow_snapshot.dataset_snapshot_id,
+                snapshot_storage_key=str(snapshot_dir.resolve()),
+                max_steps=max(1, max_rounds),
+            )
+            # Pass the AuditLog dataclass directly to render_json_report so
+            # abdp's Protocol projection (in to_jsonable) fires on adapter
+            # dataclasses and skips the inner Pydantic models. Using
+            # dataclasses.asdict here would recurse blindly and drag the
+            # non-serializable Pydantic instances into the payload.
+            shadow_audit_log.parent.mkdir(parents=True, exist_ok=True)
+            shadow_audit_log.write_text(
+                render_json_report(audit_log),
+                encoding="utf-8",
+            )
+            shadow_audit_log_file = shadow_audit_log
+
         data = {
             "run_id": run_id,
             "round_no": int(final_state.get("round_no", 0)),
@@ -683,11 +728,14 @@ def simulate_command(
             "warnings": list(final_state.get("warnings", [])),
             "report_file": str(report_file),
             "report_json_file": str(report_json_file) if report_json_file else None,
+            "shadow_audit_log_file": str(shadow_audit_log_file) if shadow_audit_log_file else None,
             "rendered_report": rendered_report.model_dump(mode="json"),
         }
         text_lines = [rendered_report.markdown, "", f"Saved report: {report_file}"]
         if report_json_file is not None:
             text_lines.append(f"Saved JSON report: {report_json_file}")
+        if shadow_audit_log_file is not None:
+            text_lines.append(f"Saved shadow audit log: {shadow_audit_log_file}")
         _output(ctx, data, text_lines)
     except ValueError as exc:
         raise click.ClickException(str(exc)) from exc
