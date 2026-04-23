@@ -609,7 +609,7 @@ def baseline_command(ctx: click.Context, snapshot_id: str, snapshot_dir: Path, o
     "abdp.scenario.ScenarioRunner (shadow execution) and the resulting AuditLog "
     "is rendered via abdp.reporting.render_json_report. Requires --snapshot-dir "
     "and the [abdp] extra. Internal IDs (scenario_key, snapshot UUID, proposal_id) "
-    "are runner-internal and never appear in younggeul-owned storage. See ADR-012 (M9'-c).",
+    "are runner-internal and never appear in younggeul-owned storage. See ADR-012 and PR #256.",
 )
 @click.pass_context
 def simulate_command(

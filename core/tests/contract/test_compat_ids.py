@@ -1,8 +1,8 @@
-"""M9'-a contract tests for `_compat.ids`.
+"""Contract tests for `_compat.ids`.
 
-Verifies the deterministic ID-derivation contract that the M9'-b shadow
-runner adapter will rely on. Per the Oracle ruling on 2026-04-23 and
-the M7' fit-gap doc:
+Verifies the deterministic ID-derivation contract that the scenario-adapter
+slice will rely on. Per the Oracle ruling on 2026-04-23 and
+the simulation fit-gap doc:
 
   * `derive_scenario_key` is a versioned full-hash of a normalized
     `ScenarioContract v1` — stable across re-runs of the same contract,
@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import date
+from typing import Any
 
 import pytest
 
@@ -32,8 +33,8 @@ from younggeul_core._compat.ids import (
 from younggeul_core.state.simulation import ScenarioSpec, Shock
 
 
-def _spec(**overrides: object) -> ScenarioSpec:
-    base: dict[str, object] = {
+def _spec(**overrides: Any) -> ScenarioSpec:
+    base: dict[str, Any] = {
         "scenario_name": "test",
         "target_gus": ["11680", "11440"],
         "target_period_start": date(2025, 3, 1),
@@ -41,7 +42,7 @@ def _spec(**overrides: object) -> ScenarioSpec:
         "shocks": [],
     }
     base.update(overrides)
-    return ScenarioSpec(**base)  # type: ignore[arg-type]
+    return ScenarioSpec(**base)
 
 
 class TestSeed:

@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Changed
+
+- **abdp selective adoption finalized (issue #245, epic #235).** `younggeul_core`
+  now adopts `agent-based-decision-pipeline` selectively where semantics
+  match: hashing delegation, deterministic JSON report rendering
+  (`simulate --render abdp`), shadow audit-log generation
+  (`simulate --shadow-audit-log`), and runner-internal scenario/snapshot
+  ID derivation. The default backend remains `local`; the abdp backend
+  is opt-in via `YOUNGGEUL_CORE_BACKEND=abdp`. See
+  [ADR-012](docs/adr/012-abdp-backed-core.md) for the final selective-adoption inventory.
+
+### Added
+
+- `simulate --shadow-audit-log <PATH>` CLI flag emits a frozen
+  `abdp.evidence.AuditLog` JSON in parallel with the LangGraph run, by
+  driving the same participant policies and round resolver through
+  `abdp.scenario.ScenarioRunner` (no decision-logic fork) (issue #244).
+- `simulate --render abdp` CLI flag renders the simulation report JSON
+  via `abdp.reporting.render_json_report`. Markdown remains the
+  byte-identical default (issue #243, PR #251).
+- `core/_compat/{ids,scenario,reporting,data}` adapter modules wrapping
+  the abdp surfaces consumed by the shadow runner and the reporting
+  flag. All synthesized identifiers (Seed, scenario_key, snapshot UUID,
+  proposal_id) are runner-internal and never appear in the markdown
+  report or CLI summary text.
+- Two-backend parity coverage in `core/tests/contract/test_compat_*`
+  exercising every adopted surface across `local` and `abdp`.
+
 ## [0.1.0] - 2026-03-29
 
 ### Added

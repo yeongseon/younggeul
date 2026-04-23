@@ -1,9 +1,9 @@
-"""Pure-resolver-math parity test (M9'-c).
+"""Pure-resolver-math parity test.
 
 Asserts that the extracted :func:`pure_resolve_round` helper produces the
 same world / participants / outcome / payload as the LangGraph round
 resolver node, for representative scenarios. This is the byte-identity
-guarantee for Oracle's M9' design ruling F (no fork between LangGraph and
+guarantee for Oracle's design ruling F for the shadow-runner work (no fork between LangGraph and
 abdp shadow runner).
 """
 

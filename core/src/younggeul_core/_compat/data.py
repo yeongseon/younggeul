@@ -2,7 +2,7 @@
 
 This module deliberately does **not** replace any younggeul row schema or
 the dataset-level ``younggeul_core.storage.snapshot.SnapshotManifest``.
-Per the M4' scope correction:
+Per the selective-adoption plan (ADR-012 amendment) recorded in ADR-012:
 
 - ``abdp.data.{Bronze,Silver,Gold}Contract`` are abstract structural
   ``Protocol`` types with only ``manifest`` and ``rows`` properties.
@@ -13,11 +13,12 @@ Per the M4' scope correction:
 - ``younggeul_core.storage.snapshot.SnapshotManifest`` is a Pydantic
   multi-table dataset manifest with sha256-derived integrity IDs.
 
-These are *not* bijective. We expose abdp's framework contracts here only
-for downstream code that wants to type-annotate "any framework artifact"
-(e.g., future audit/reporting adapters in M5'/M6'). Importing names from
-this module pulls in ``abdp`` lazily; code that does not need framework
-contracts pays no import cost.
+These are *not* bijective. We expose abdp's framework contracts here as
+an intentional public typing surface for downstream code that wants to
+type-annotate "any framework artifact" (e.g., the shadow-runner work
+adapter primitives in :mod:`younggeul_core._compat.scenario`). Importing
+names from this module pulls in ``abdp`` lazily; code that does not need
+framework contracts pays no import cost.
 
 Use of these aliases does **not** imply that the local types satisfy
 them — the local types intentionally hold richer state.

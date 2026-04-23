@@ -51,8 +51,8 @@ Scopes: `core`, `app/kr-seoul`, `eval`, `ci`, `docs`
 ### Branch Strategy
 
 - `main` — stable, always passing CI
-- Feature branches: `feat/M{milestone}-{issue-number}-{short-description}`
-- Example: `feat/M1-13-bronze-schemas`
+- Feature branches: `feat/{issue-number}-{short-description}`
+- Example: `feat/13-bronze-schemas`
 
 ### Code Style
 

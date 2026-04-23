@@ -1,7 +1,7 @@
-"""M9'-a: ID derivation and ScenarioContract normalization for the
-shadow runner adapter (see ADR-012 + docs/architecture/abdp-simulation-fit-gap.md).
+"""ID derivation and ScenarioContract normalization for the
+abdp shadow runner adapter (see ADR-012 + docs/architecture/abdp-simulation-fit-gap.md).
 
-These helpers exist so the M9'-b adapter can produce a real
+These helpers exist so the scenario-adapter slice can produce a real
 `abdp.scenario.ScenarioRun` whose `scenario_key`, `seed`, and
 `SnapshotRef.snapshot_id` carry deterministic, internal-only values
 derived from younggeul's existing canonical sources (sha256 snapshot
@@ -44,7 +44,7 @@ frozen here; rotating it would invalidate every previously generated
 `SCENARIO_KEY_VERSION`-style versioning scheme."""
 
 DEFAULT_SHADOW_SEED: Final[int] = 0
-"""Seed value used by the M9' shadow `ScenarioRun`. younggeul has no
+"""Seed value used by the shadow-runner `ScenarioRun`. younggeul has no
 RNG-seeded simulation behavior today, so the seed has no entropy role
 and is a constant. If randomness is later introduced, the seed must
 become an explicit cross-engine input before any parity claim
@@ -86,7 +86,7 @@ def derive_scenario_key(spec: ScenarioSpec) -> str:
     sensitive to roster/shock changes via `normalize_scenario_contract`.
 
     Returns a string of shape ``"yg-scenario-v1:<sha256hex>"``. Full
-    digest is preserved (no truncation) per the M9' design ruling.
+    digest is preserved (no truncation) per Oracle's design ruling.
     """
     contract = normalize_scenario_contract(spec)
     payload = json.dumps(contract, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")

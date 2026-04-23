@@ -1,12 +1,12 @@
-"""abdp shadow runner wiring (M9'-c).
+"""abdp shadow runner wiring.
 
 Drives :class:`abdp.scenario.ScenarioRunner` over younggeul's existing
-participant-policy and round-resolver logic by composing the M9'-b
+participant-policy and round-resolver logic by composing the scenario-adapter
 adapter primitives in :mod:`younggeul_core._compat.scenario` with the
 pure resolution math in :mod:`.nodes._resolver_math` and the policy
 registry in :mod:`.policies`.
 
-Per Oracle's M9' design ruling F (REAL SHADOW EXECUTION, not synthesis):
+Per Oracle's design ruling F for the shadow-runner work (REAL SHADOW EXECUTION, not synthesis):
 the agents and resolver here MUST call the same decide/resolve logic the
 LangGraph nodes call, never a fork. They do: each
 :class:`younggeul_core._compat.scenario.CallableAgent` invokes

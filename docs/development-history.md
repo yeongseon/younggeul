@@ -1,7 +1,7 @@
-# Development Journey: M0 → M10
+# Development Journey: v0.1 Release
 
 How the **영끌 시뮬레이터 (YOLO Mortgage Simulator)** went from an empty
-repository to a fully released v0.1.0 in eleven milestones.
+repository to a fully released v0.1.0 in eleven phases.
 
 ---
 
@@ -35,7 +35,7 @@ licensed codebase.
 
 ---
 
-## M0: Foundation & Scaffolding (12 issues)
+## Foundation & Scaffolding (12 issues)
 
 The first milestone established the repository skeleton.
 
@@ -64,7 +64,7 @@ The first milestone established the repository skeleton.
 
 ---
 
-## M1: Contracts & Schemas (8 issues)
+## Contracts & Schemas (8 issues)
 
 Data contracts came before any implementation — a deliberate choice that paid
 off throughout the project.
@@ -91,7 +91,7 @@ off throughout the project.
 
 ---
 
-## M2: Data Plane — Bronze (17 issues)
+## Data Plane — Bronze (17 issues)
 
 The first real data flowing through the system.
 
@@ -118,7 +118,7 @@ The first real data flowing through the system.
 
 ---
 
-## M3: Data Plane — Silver & Entity Resolution (11 issues)
+## Data Plane — Silver & Entity Resolution (11 issues)
 
 Cleaning and typing the raw Bronze data.
 
@@ -144,7 +144,7 @@ Cleaning and typing the raw Bronze data.
 
 ---
 
-## M4: Data Plane — Gold & Baseline (14 issues)
+## Data Plane — Gold & Baseline (14 issues)
 
 Aggregation and the first analytical output.
 
@@ -174,7 +174,7 @@ Aggregation and the first analytical output.
 
 ---
 
-## M5: Simulation Plane — Core Runtime (14 issues)
+## Simulation Plane — Core Runtime (14 issues)
 
 The simulation engine skeleton.
 
@@ -202,7 +202,7 @@ The simulation engine skeleton.
 
 ---
 
-## M6: Simulation Plane — Participant Agents (21 issues)
+## Simulation Plane — Participant Agents (21 issues)
 
 The largest milestone, bringing the market to life.
 
@@ -234,7 +234,7 @@ The largest milestone, bringing the market to life.
 
 ---
 
-## M7: Report & Evidence Pipeline (11 issues)
+## Report & Evidence Pipeline (11 issues)
 
 Turning simulation data into trustworthy output.
 
@@ -263,7 +263,7 @@ Turning simulation data into trustworthy output.
 
 ---
 
-## M8: Evaluation Plane (10 issues)
+## Evaluation Plane (10 issues)
 
 Systematic quality assurance.
 
@@ -293,7 +293,7 @@ Systematic quality assurance.
 
 ---
 
-## M9: Observability & Security (4 issues)
+## Observability & Security (4 issues)
 
 Production readiness foundations.
 
@@ -316,12 +316,12 @@ Production readiness foundations.
 
 **Lessons learned:**
 
-- The 4-issue milestone was refreshingly focused after M6's 21 issues.
+- The 4-issue milestone was refreshingly focused after the Participant Agents phase's 21 issues.
   Smaller milestones with clear scope are more productive.
 
 ---
 
-## M10: v0.1 Release (10 issues)
+## v0.1 Release (10 issues)
 
 Packaging everything for public use.
 
@@ -354,7 +354,7 @@ Packaging everything for public use.
 
 | Metric | Value |
 |--------|-------|
-| Milestones completed | 11 (M0 → M10) |
+| Phases completed | 11 (Foundation → v0.1 Release) |
 | Issues closed | 132 |
 | Pull requests merged | 60+ |
 | Tests passing | 1,111+ |

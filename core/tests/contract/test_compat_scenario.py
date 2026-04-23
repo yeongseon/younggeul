@@ -1,8 +1,8 @@
-"""M9'-b contract tests for `_compat.scenario`.
+"""Contract tests for `_compat.scenario`.
 
 Verifies the abdp scenario-runner adapter primitives: type-shape adapters,
 SimulationState projection, generic Agent/ActionResolver wrappers, and the
-AuditLog projection helper. Per Oracle's binding M9' ruling, the test
+AuditLog projection helper. Per Oracle's binding design ruling for the shadow-runner work, the test
 suite drives `abdp.scenario.ScenarioRunner.run()` end-to-end with
 callable-backed adapters and asserts the resulting ScenarioRun /
 AuditLog are real (not synthesized) abdp objects with all invariants
@@ -14,7 +14,7 @@ from __future__ import annotations
 # pyright: reportMissingImports=false
 
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 import pytest
@@ -157,7 +157,7 @@ class TestActionAdapter:
         assert adapter.action_key == "buy"
         assert adapter.payload["agent_id"] == "buyer-1"
         assert adapter.payload["action_type"] == "buy"
-        UUID(adapter.proposal_id)
+        _ = UUID(adapter.proposal_id)
         assert adapter.inner is core_action
 
     def test_proposal_id_is_deterministic(self, core_action: ActionProposal) -> None:
@@ -208,7 +208,7 @@ class TestSnapshotRefProjection:
                 sha256_hex=snapshot_sha,
                 storage_key="snapshots/x.parquet",
                 registry=registry,
-                tier="platinum",
+                tier=cast(Any, "platinum"),
             )
 
 
@@ -383,8 +383,12 @@ class TestEndToEndScenarioRun:
 
         resolver = CallableResolver(resolve_fn=resolve)
 
-        runner: ScenarioRunner[Any, Any, Any] = ScenarioRunner(agents=(agent,), resolver=resolver, max_steps=3)
-        run = runner.run(spec)
+        runner: ScenarioRunner[Any, Any, Any] = ScenarioRunner(
+            agents=cast(Any, (agent,)),
+            resolver=cast(Any, resolver),
+            max_steps=3,
+        )
+        run = runner.run(cast(Any, spec))
 
         assert isinstance(run, ScenarioRun)
         assert run.scenario_key == scenario_key
@@ -455,7 +459,7 @@ class TestProjectAuditLog:
         # invariant always holds when called via project_audit_log.
         # Constructing AuditLog directly with mismatched values must fail.
         with pytest.raises(ValueError, match="scenario_key"):
-            AuditLog(
+            _ = AuditLog(
                 scenario_key="different",
                 seed=run.seed,
                 run=run,

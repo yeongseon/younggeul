@@ -1,4 +1,4 @@
-"""abdp scenario-runner adapter primitives (M9'-b).
+"""abdp scenario-runner adapter primitives.
 
 This module ships the *generic, app-agnostic* building blocks needed to drive
 :mod:`abdp.scenario.ScenarioRunner` over data produced by the existing
@@ -6,7 +6,7 @@ younggeul LangGraph pipeline. The primitives live in ``core`` because they
 operate purely on core's Pydantic projection types
 (:mod:`younggeul_core.state.simulation`) and the abdp public contracts.
 
-Per ADR-012 and Oracle's binding M9' design ruling:
+Per ADR-012 and Oracle's binding design ruling for the shadow-runner work:
 
 * The LangGraph ``GraphState`` (in ``apps/``) remains the canonical state
   representation. ``SimulationState`` (here, in ``core``) and abdp's
@@ -19,7 +19,7 @@ Per ADR-012 and Oracle's binding M9' design ruling:
 
 The adapter classes here are intentionally generic (callable-backed).
 The actual wiring of younggeul's ``ParticipantPolicy.decide`` and the
-``round_resolver`` math into these adapters is performed in M9'-c at the
+``round_resolver`` math into these adapters is performed in the shadow-runner slice at the
 ``apps/kr-seoul-apartment/`` layer (which is permitted to depend on core).
 That layered split preserves the strict ``core <- apps`` dependency rule.
 """
@@ -250,7 +250,7 @@ def to_abdp_simulation_state(
         snapshot_ref=snapshot_ref,
         segments=segment_adapters,
         participants=participant_adapters,
-        pending_actions=pending_adapters,
+        pending_actions=cast(Any, pending_adapters),
     )
 
 
@@ -265,7 +265,7 @@ class CallableAgent(Generic[_S, _P, _A]):
 
     The wrapped callable receives an :class:`abdp.agents.AgentContext` and
     must return an :class:`abdp.agents.AgentDecision`. younggeul-app
-    callables (M9'-c) translate the AgentContext into the form expected by
+    callables from the shadow-runner slice translate the AgentContext into the form expected by
     ``ParticipantPolicy.decide`` and project the result back.
     """
 
