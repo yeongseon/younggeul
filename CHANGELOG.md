@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **abdp pin bumped to v0.5 ReviewLoopRunner / two-plane execution model.**
+  The `[abdp]` extra now points at the squash-merge commit of
+  `agent-based-decision-pipeline#175`, which lands the v0.5 cyclic
+  `ReviewLoopRunner` (two-plane execution model, ADR-0001) on top of #174's
+  `abdp.inspector` tracing subsystem (v0.4). `abdp.__version__` continues to
+  report `0.3.0` on this commit; the new `abdp.inspector` and `abdp.review`
+  packages are additive and not yet adopted by `younggeul_core`'s selective
+  compat layer (ADR-012). Default backend remains `local`; the abdp backend
+  stays opt-in via `YOUNGGEUL_CORE_BACKEND=abdp`.
+
 - **abdp selective adoption finalized (issue #245, epic #235).** `younggeul_core`
   now adopts `agent-based-decision-pipeline` selectively where semantics
   match: hashing delegation, deterministic JSON report rendering
