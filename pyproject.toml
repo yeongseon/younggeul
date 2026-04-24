@@ -59,10 +59,14 @@ docs = [
 ]
 # abdp backend (Adapter Layer; see ADR-012). Optional extra so the default
 # install keeps working with the local backend. Pinned to a specific commit
-# on abdp main (post-yeongseon/agent-based-decision-pipeline#163) where
-# `abdp.__version__` correctly reports "0.3.0".
+# on abdp main (post-yeongseon/agent-based-decision-pipeline#175) which
+# squash-merges the v0.5 ReviewLoopRunner / two-plane execution model on
+# top of #174's Inspector tracing subsystem (v0.4). `abdp.__version__`
+# continues to report "0.3.0" on this commit; the new `abdp.inspector`
+# and `abdp.review` packages are additive and not yet adopted by the
+# selective compat layer (ADR-012).
 abdp = [
-  "abdp @ git+https://github.com/yeongseon/agent-based-decision-pipeline.git@e695ea664926680fe456e5b409f46b39080aa40b",
+  "abdp @ git+https://github.com/yeongseon/agent-based-decision-pipeline.git@9520cfed7e150f644fb5d01bb1a9b32eb0082f8d",
 ]
 
 [tool.hatch.metadata]
