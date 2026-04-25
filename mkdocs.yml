@@ -98,6 +98,7 @@ nav:
     - ADR-010 Data Pipeline Live Workflow: adr/010-data-pipeline-live-workflow.md
     - ADR-011 Simulate Live Snapshot Wiring: adr/011-simulate-live-snapshot-wiring.md
     - ADR-012 abdp-Backed Core: adr/012-abdp-backed-core.md
+    - ADR-013 Default All Seoul Districts: adr/013-default-all-seoul-districts.md
   - API Reference:
     - Overview: api/index.md
     - Core:

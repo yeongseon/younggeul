@@ -162,3 +162,13 @@ Mitigations adopted:
 
 The CLI itself is unchanged; only the workflow defaults and operational
 guidance are revised.
+
+## Amendment 2026-04-25 — 25-gu default rollout
+
+Issue [#263](https://github.com/kpubdata-lab/younggeul/issues/263) expands the workflow and local demo defaults from Gangnam-only (`11680`) to all 25 Seoul gu.
+
+- `.github/workflows/data-pipeline.yml` now defaults `gus` to the full 25-gu CSV for both `workflow_dispatch` and the scheduled fallback branch.
+- The cron posture remains `source=fixture`; GitHub-hosted runners are still blocked by MOLIT, so the workflow continues to exercise the deterministic end-to-end path off live APIs.
+- `younggeul ingest --source fixture` now honors `--gus` and `--months`, so scheduled fixture runs cover the same 25-gu fan-out shape that the defaults request.
+
+This amendment is paired with [ADR-013: Default Seoul ingest entrypoints to all 25 districts](013-default-all-seoul-districts.md).

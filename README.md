@@ -115,10 +115,10 @@ To chain ingest → snapshot publish → baseline against real APIs in one shot:
 
 ```bash
 set -a; source .env; set +a   # load KPUBDATA_* keys
-make demo-live                # or: GU=11680 MONTHS=202403,202503 bash scripts/demo_live.sh
+make demo-live                # defaults to all 25 Seoul gu; or narrow with GU=11680 MONTHS=202403,202503 bash scripts/demo_live.sh
 ```
 
-GitHub Actions can also run the live ingest on a schedule or via manual dispatch through `.github/workflows/data-pipeline.yml`. The workflow defaults to Gangnam (`11680`) and the last completed UTC month, and its operational rationale is documented in [ADR-010](docs/adr/010-data-pipeline-live-workflow.md).
+GitHub Actions can also run the live ingest on a schedule or via manual dispatch through `.github/workflows/data-pipeline.yml`. The workflow now defaults to all 25 Seoul gu and the last completed UTC month, while its scheduled `source=fixture` posture remains unchanged because MOLIT blocks GitHub-hosted runner IPs. The operational rationale is documented in [ADR-010](docs/adr/010-data-pipeline-live-workflow.md) and [ADR-013](docs/adr/013-default-all-seoul-districts.md).
 
 ## v0.1 Scope
 

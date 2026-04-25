@@ -65,7 +65,13 @@ younggeul ingest --source live --gu 11680 --month 202503 --output-dir ./output/l
 younggeul ingest --source live --gu 11680 --months 202403,202503 --output-dir ./output/live-yoy
 ```
 
-v0.1 covers one gu per invocation. See [ADR-007](../adr/007-kpubdata-live-ingest.md) for the design and current scope.
+For cross-district coverage, use `--gus`:
+
+```bash
+younggeul ingest --source live --gus 11110,11140,11680 --months 202403,202503 --output-dir ./output/live-multi
+```
+
+The GitHub Actions data pipeline and `make demo-live` entrypoints now default to all 25 Seoul gu unless you narrow them explicitly with `gus`/`GU`. See [ADR-007](../adr/007-kpubdata-live-ingest.md), [ADR-010](../adr/010-data-pipeline-live-workflow.md), and [ADR-013](../adr/013-default-all-seoul-districts.md) for the design details.
 
 !!! note
     All tutorial examples use fixture data; no API key is required.
