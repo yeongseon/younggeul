@@ -5,37 +5,10 @@ from __future__ import annotations
 from datetime import date
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
+from younggeul_app_kr_seoul_apartment.canonical import SEOUL_GU_CODE_TO_NAME, SEOUL_GU_CODES
 from younggeul_core.connectors.hashing import sha256_payload
 from younggeul_core.state.bronze import BronzeAptTransaction
 from younggeul_core.state.silver import SilverAptTransaction, SilverDataQualityScore
-
-SEOUL_GU_CODES: dict[str, str] = {
-    "11110": "종로구",
-    "11140": "중구",
-    "11170": "용산구",
-    "11200": "성동구",
-    "11215": "광진구",
-    "11230": "동대문구",
-    "11260": "중랑구",
-    "11290": "성북구",
-    "11305": "강북구",
-    "11320": "도봉구",
-    "11350": "노원구",
-    "11380": "은평구",
-    "11410": "서대문구",
-    "11440": "마포구",
-    "11470": "양천구",
-    "11500": "강서구",
-    "11530": "구로구",
-    "11545": "금천구",
-    "11560": "영등포구",
-    "11590": "동작구",
-    "11620": "관악구",
-    "11650": "서초구",
-    "11680": "강남구",
-    "11710": "송파구",
-    "11740": "강동구",
-}
 
 
 def parse_deal_amount(raw: str | None) -> int | None:
@@ -146,7 +119,7 @@ def derive_gu_name(gu_code: str | None) -> str | None:
     """
     if gu_code is None:
         return None
-    return SEOUL_GU_CODES.get(gu_code)
+    return SEOUL_GU_CODE_TO_NAME.get(gu_code)
 
 
 def is_cancelled(cancel_deal_type: str | None) -> bool:

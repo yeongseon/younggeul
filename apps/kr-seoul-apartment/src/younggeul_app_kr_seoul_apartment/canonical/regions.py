@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import MappingProxyType
+from typing import Mapping
 
 _SEOUL_GU_ITEMS: tuple[tuple[str, str], ...] = (
     ("11110", "종로구"),
@@ -31,7 +32,7 @@ _SEOUL_GU_ITEMS: tuple[tuple[str, str], ...] = (
 )
 
 SEOUL_GU_CODES: tuple[str, ...] = tuple(code for code, _ in _SEOUL_GU_ITEMS)
-SEOUL_GU_CODE_TO_NAME = MappingProxyType(dict(_SEOUL_GU_ITEMS))
-SEOUL_GU_NAME_TO_CODE = MappingProxyType({name: code for code, name in _SEOUL_GU_ITEMS})
+SEOUL_GU_CODE_TO_NAME: Mapping[str, str] = MappingProxyType(dict(_SEOUL_GU_ITEMS))
+SEOUL_GU_NAME_TO_CODE: Mapping[str, str] = MappingProxyType({name: code for code, name in _SEOUL_GU_ITEMS})
 
 __all__ = ["SEOUL_GU_CODES", "SEOUL_GU_CODE_TO_NAME", "SEOUL_GU_NAME_TO_CODE"]

@@ -4,6 +4,7 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
 
+from younggeul_app_kr_seoul_apartment.canonical import SEOUL_GU_CODES
 from younggeul_app_kr_seoul_apartment.transforms.silver_apt import (
     compute_quality_score,
     derive_gu_code,
@@ -123,6 +124,10 @@ class TestDeriveGuCode:
     def test_valid_seoul_code_returns_code(self) -> None:
         assert derive_gu_code("11680") == "11680"
 
+    def test_all_canonical_codes_round_trip(self) -> None:
+        for code in SEOUL_GU_CODES:
+            assert derive_gu_code(code) == code
+
     def test_non_seoul_code_returns_none(self) -> None:
         assert derive_gu_code("41135") is None
 
@@ -133,6 +138,10 @@ class TestDeriveGuCode:
 class TestDeriveGuName:
     def test_valid_lookup_returns_name(self) -> None:
         assert derive_gu_name("11680") == "강남구"
+
+    def test_all_canonical_codes_resolve_names(self) -> None:
+        for code in SEOUL_GU_CODES:
+            assert derive_gu_name(code) is not None
 
     def test_unknown_returns_none(self) -> None:
         assert derive_gu_name("99999") is None
