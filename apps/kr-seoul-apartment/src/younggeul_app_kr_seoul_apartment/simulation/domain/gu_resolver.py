@@ -2,34 +2,7 @@
 
 from __future__ import annotations
 
-SEOUL_GU_MAP: dict[str, str] = {
-    "11110": "종로구",
-    "11140": "중구",
-    "11170": "용산구",
-    "11200": "성동구",
-    "11215": "광진구",
-    "11230": "동대문구",
-    "11260": "중랑구",
-    "11290": "성북구",
-    "11305": "강북구",
-    "11320": "도봉구",
-    "11350": "노원구",
-    "11380": "은평구",
-    "11410": "서대문구",
-    "11440": "마포구",
-    "11470": "양천구",
-    "11500": "강서구",
-    "11530": "구로구",
-    "11545": "금천구",
-    "11560": "영등포구",
-    "11590": "동작구",
-    "11620": "관악구",
-    "11650": "서초구",
-    "11680": "강남구",
-    "11710": "송파구",
-    "11740": "강동구",
-}
-SEOUL_NAME_TO_CODE: dict[str, str] = {name: code for code, name in SEOUL_GU_MAP.items()}
+from younggeul_app_kr_seoul_apartment.canonical import SEOUL_GU_CODE_TO_NAME, SEOUL_GU_NAME_TO_CODE
 
 
 def resolve_gu_codes(
@@ -55,19 +28,21 @@ def resolve_gu_codes(
     warnings: list[str] = []
     available_set = set(available_gu_codes)
 
-    if hint in SEOUL_GU_MAP:
+    if hint in SEOUL_GU_CODE_TO_NAME:
         if hint in available_set:
             return [hint], warnings
         return list(available_gu_codes), [f"Requested gu code '{hint}' is unavailable in snapshot coverage."]
 
-    direct_code = SEOUL_NAME_TO_CODE.get(hint)
+    direct_code = SEOUL_GU_NAME_TO_CODE.get(hint)
     if direct_code is not None:
         if direct_code in available_set:
             return [direct_code], warnings
         return list(available_gu_codes), [f"Requested district '{hint}' is unavailable in snapshot coverage."]
 
     matched_codes = [
-        code for code in available_gu_codes if SEOUL_GU_MAP.get(code) is not None and SEOUL_GU_MAP[code] in hint
+        code
+        for code in available_gu_codes
+        if SEOUL_GU_CODE_TO_NAME.get(code) is not None and SEOUL_GU_CODE_TO_NAME[code] in hint
     ]
     if matched_codes:
         return matched_codes, warnings
