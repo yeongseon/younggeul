@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from click.testing import CliRunner
+from younggeul_app_kr_seoul_apartment.canonical import SEOUL_GU_CODES
 
 cli = import_module("younggeul_app_kr_seoul_apartment.cli")
 
@@ -141,6 +142,80 @@ def test_ingest_live_rejects_gu_and_gus_together(runner: CliRunner, tmp_path: Pa
 
     assert result.exit_code != 0
     assert "--gu and --gus are mutually exclusive" in result.output
+
+
+def test_parse_gus_csv_accepts_all_seoul_codes() -> None:
+    assert cli._parse_gus_csv(",".join(SEOUL_GU_CODES)) == list(SEOUL_GU_CODES)
+
+
+def test_ingest_fixture_rejects_gu_and_gus_together(runner: CliRunner, tmp_path: Path) -> None:
+    result = runner.invoke(
+        cli.main,
+        [
+            "ingest",
+            "--source",
+            "fixture",
+            "--gu",
+            "11680",
+            "--gus",
+            "11680,11440",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--gu and --gus are mutually exclusive" in result.output
+
+
+def test_ingest_fixture_rejects_month_and_months_together(runner: CliRunner, tmp_path: Path) -> None:
+    result = runner.invoke(
+        cli.main,
+        [
+            "ingest",
+            "--source",
+            "fixture",
+            "--month",
+            "202503",
+            "--months",
+            "202503,202504",
+            "--output-dir",
+            str(tmp_path),
+        ],
+    )
+
+    assert result.exit_code != 0
+    assert "--month and --months are mutually exclusive" in result.output
+
+
+def test_ingest_fixture_fans_out_requested_gus_and_months(runner: CliRunner, tmp_path: Path) -> None:
+    output_dir = tmp_path / "pipeline"
+    target_gus = list(SEOUL_GU_CODES[:3])
+
+    result = runner.invoke(
+        cli.main,
+        [
+            "ingest",
+            "--source",
+            "fixture",
+            "--gus",
+            ",".join(target_gus),
+            "--months",
+            "202503,202504",
+            "--output-dir",
+            str(output_dir),
+        ],
+    )
+
+    assert result.exit_code == 0
+    rows = [
+        json.loads(line)
+        for line in (output_dir / "gold_district_monthly_metrics.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    assert len(rows) == len(target_gus) * 2
+    assert {row["gu_code"] for row in rows} == set(target_gus)
+    assert {row["period"] for row in rows} == {"2025-03", "2025-04"}
 
 
 def test_simulate_runs_successfully(runner: CliRunner, tmp_path: Path) -> None:
