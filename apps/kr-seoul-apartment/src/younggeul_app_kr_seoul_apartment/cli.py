@@ -154,6 +154,68 @@ def _fixture_bronze_input() -> BronzeInput:
     )
 
 
+def _parse_months_csv(months: str) -> list[str]:
+    target_months = [month.strip() for month in months.split(",") if month.strip()]
+    if not target_months:
+        raise click.ClickException("--months must include at least one YYYYMM value")
+    return target_months
+
+
+def _fixture_bronze_input_fanout(lawd_codes: list[str], deal_yms: list[str]) -> BronzeInput:
+    fixture = _fixture_bronze_input()
+    apt_template = fixture.apt_transactions[0]
+    rate_template = fixture.interest_rates[0]
+    migration_template = fixture.migrations[0]
+
+    apt_transactions: list[BronzeAptTransaction] = []
+    interest_rates: list[BronzeInterestRate] = []
+    migrations: list[BronzeMigration] = []
+
+    for month_index, deal_ym in enumerate(deal_yms, start=1):
+        deal_year = deal_ym[:4]
+        deal_month = str(int(deal_ym[4:6]))
+        period_month = deal_ym[4:6]
+
+        interest_rates.append(
+            rate_template.model_copy(
+                update={
+                    "raw_response_hash": f"fixture-rate-{deal_ym}".encode("utf-8").hex().ljust(64, "0")[:64],
+                    "date": f"{deal_year}-{period_month}-01",
+                }
+            )
+        )
+        migrations.append(
+            migration_template.model_copy(
+                update={
+                    "raw_response_hash": f"fixture-migration-{deal_ym}".encode("utf-8").hex().ljust(64, "0")[:64],
+                    "year": deal_year,
+                    "month": period_month,
+                }
+            )
+        )
+
+        for gu_index, lawd_code in enumerate(lawd_codes, start=1):
+            apt_transactions.append(
+                apt_template.model_copy(
+                    update={
+                        "raw_response_hash": f"fixture-apt-{lawd_code}-{deal_ym}".encode("utf-8")
+                        .hex()
+                        .ljust(64, "0")[:64],
+                        "deal_year": deal_year,
+                        "deal_month": deal_month,
+                        "serial_number": f"fixture-{month_index:02d}-{gu_index:02d}",
+                        "sgg_code": lawd_code,
+                    }
+                )
+            )
+
+    return BronzeInput(
+        apt_transactions=apt_transactions,
+        interest_rates=interest_rates,
+        migrations=migrations,
+    )
+
+
 def _load_gold_rows(data_dir: Path) -> list[GoldDistrictMonthlyMetrics]:
     primary = data_dir / "gold_district_monthly_metrics.jsonl"
     candidate_files = [primary] if primary.exists() else sorted(data_dir.glob("*.jsonl"))
@@ -351,13 +413,14 @@ def ingest_command(
     ``KPUBDATA_BOK_API_KEY`` environment variables.
     """
     try:
+        if lawd_code and lawd_codes_csv:
+            raise click.ClickException("--gu and --gus are mutually exclusive")
+        if deal_ym and deal_yms_csv:
+            raise click.ClickException("--month and --months are mutually exclusive")
+
         if source == "live":
-            if lawd_code and lawd_codes_csv:
-                raise click.ClickException("--gu and --gus are mutually exclusive")
             if not lawd_code and not lawd_codes_csv:
                 raise click.ClickException("exactly one of --gu or --gus is required when --source=live")
-            if deal_ym and deal_yms_csv:
-                raise click.ClickException("--month and --months are mutually exclusive")
             if not deal_ym and not deal_yms_csv:
                 raise click.ClickException("exactly one of --month or --months is required when --source=live")
             from younggeul_app_kr_seoul_apartment.connectors.client_factory import build_client
@@ -378,7 +441,29 @@ def ingest_command(
             client = build_client()
             bronze = run_live_ingest_gus_months(client=client, lawd_codes=lawd_codes, deal_yms=deal_yms)
         else:
-            bronze = _fixture_bronze_input()
+            if lawd_codes_csv or deal_yms_csv:
+                if lawd_codes_csv:
+                    lawd_codes = _parse_gus_csv(lawd_codes_csv)
+                elif lawd_code is not None:
+                    lawd_codes = [lawd_code]
+                else:
+                    lawd_codes = ["11680"]
+
+                if deal_yms_csv:
+                    deal_yms = _parse_months_csv(deal_yms_csv)
+                elif deal_ym is not None:
+                    deal_yms = [deal_ym]
+                else:
+                    deal_yms = ["202507"]
+
+                bronze = _fixture_bronze_input_fanout(lawd_codes=lawd_codes, deal_yms=deal_yms)
+            elif lawd_code is not None or deal_ym is not None:
+                bronze = _fixture_bronze_input_fanout(
+                    lawd_codes=[lawd_code or "11680"],
+                    deal_yms=[deal_ym or "202507"],
+                )
+            else:
+                bronze = _fixture_bronze_input()
         result = run_pipeline(bronze)
 
         output_dir.mkdir(parents=True, exist_ok=True)
